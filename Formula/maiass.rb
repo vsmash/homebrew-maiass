@@ -11,6 +11,7 @@ class Maiass < Formula
   
     def install
         bin.install "maiass.sh" => "maiass"
+        bin.install "package.json"
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
     end
