@@ -20,3 +20,21 @@ class Miass < Formula
     end
   end
   
+  def caveats
+    <<~EOS
+      🧠 MAIASS has been installed!
+  
+      You can now use:
+        maiass       # Main command
+        myass, miass # Shortcut aliases
+  
+      To view usage:
+        maiass --help
+  
+      To enable AI commit messages:
+        export MAIASS_OPENAI_TOKEN=your_api_key
+        export MAIASS_OPENAI_MODE=ask
+  
+      Full docs: https://github.com/vsmash/maiass
+    EOS
+  end
