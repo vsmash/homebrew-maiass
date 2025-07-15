@@ -1,4 +1,4 @@
-class committhis < Formula
+class Committhis < Formula
     desc "AI powered Git commit messages"
     homepage "https://github.com/vsmash/committhis"
     url "https://github.com/vsmash/committhis/archive/refs/tags/4.8.32.tar.gz"
