@@ -1,8 +1,32 @@
 #!/bin/bash
-# updatemyass.sh - Automated script to update Homebrew formula files for MAIASS
-# This script fetches the latest version, downloads the tarball, computes SHA256,
-# and updates all formula files with the new version information.
+# update-formula.sh - Modular Homebrew formula updater for multiple branded tools
 
+set -e
+
+# --- Configurable by brand ---
+if [[ -z "$1" ]]; then
+  for brand in maiass aicommit; do
+    echo
+    echo -e "\033[1;35m🔁 Running updater for: $brand\033[0m"
+    exec "$0" "$brand"
+  done
+  exit 0
+else
+  BRAND="${1,,}" # Lowercase
+fi
+if [[ "$BRAND" == "maiass" ]]; then
+  REPO="vsmash/maiass"
+  FORMULAS=("Formula/maiass.rb" "Formula/myass.rb" "Formula/miass.rb")
+  BINARY_NAME="maiass"
+elif [[ "$BRAND" == "aicommit" ]]; then
+  REPO="vsmash/aicommit"
+  FORMULAS=("Formula/aicommit.rb" "Formula/ai.rb" "Formula/committhis.rb")
+  BINARY_NAME="aicommit"
+else
+  echo "Usage: $0 <brand>"
+  echo "Supported brands: maiass, aicommit"
+  exit 1
+fi
 set -e  # Exit on any error
 
 # Colors for output
@@ -34,7 +58,7 @@ echo "════════════════════════�
 
 # Step 1: Fetch latest version from maiass repo package.json
 print_info "Fetching latest version from maiass repository..."
-PACKAGE_JSON_URL="https://raw.githubusercontent.com/vsmash/maiass/main/package.json"
+PACKAGE_JSON_URL="https://raw.githubusercontent.com/$REPO/main/package.json"
 
 # Try to fetch the package.json and extract version
 if command -v curl >/dev/null 2>&1; then
@@ -70,7 +94,7 @@ fi
 print_info "Using version: $NEW_VERSION"
 
 # Step 3: Construct tag URL and check if it exists
-TAG_URL="https://github.com/vsmash/maiass/archive/refs/tags/${NEW_VERSION}.tar.gz"
+TAG_URL="https://github.com/$REPO/archive/refs/tags/${NEW_VERSION}.tar.gz"
 print_info "Checking if tag exists: $TAG_URL"
 
 # Check if the tag URL exists (follow redirects)
@@ -129,31 +153,29 @@ rm -f "$TEMP_FILE"
 # Step 5: Update all formula files
 print_info "Updating formula files..."
 
-FORMULA_FILES=("Formula/maiass.rb" "Formula/myass.rb" "Formula/miass.rb")
-
-for FORMULA_FILE in "${FORMULA_FILES[@]}"; do
+for FORMULA_FILE in "${FORMULAS[@]}"; do
     if [[ ! -f "$FORMULA_FILE" ]]; then
         print_warning "Formula file not found: $FORMULA_FILE"
         continue
     fi
-    
+
     print_info "Updating $FORMULA_FILE..."
-    
+
     # Create backup
     cp "$FORMULA_FILE" "${FORMULA_FILE}.backup"
-    
+
     # Update URL
     sed -i.tmp "s|url \"https://github.com/vsmash/maiass/archive/refs/tags/[^\"]*\"|url \"$TAG_URL\"|g" "$FORMULA_FILE"
-    
+
     # Update SHA256
     sed -i.tmp "s/sha256 \"[^\"]*\"/sha256 \"$NEW_SHA256\"/g" "$FORMULA_FILE"
-    
+
     # Update version
     sed -i.tmp "s/version \"[^\"]*\"/version \"$NEW_VERSION\"/g" "$FORMULA_FILE"
-    
+
     # Clean up temp files
     rm -f "${FORMULA_FILE}.tmp"
-    
+
     print_success "Updated $FORMULA_FILE"
 done
 
@@ -183,33 +205,39 @@ if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
     # Add files
     print_info "Adding files to git..."
     git add Formula/
-    
+
     # Commit changes
     COMMIT_MSG="Update to version $NEW_VERSION"
     print_info "Committing changes with message: '$COMMIT_MSG'"
     git commit -m "$COMMIT_MSG"
-    
+
     # Ask about pushing
     read -p "Push to remote repository? (y/N): " CONFIRM_PUSH
     if [[ "$CONFIRM_PUSH" =~ ^[Yy]$ ]]; then
         print_info "Pushing to remote..."
         git push
         print_success "Changes pushed successfully!"
-        
+
         # Ask about testing installation
         echo
         read -p "Test the Homebrew installation now? (y/N): " CONFIRM_TEST
         if [[ "$CONFIRM_TEST" =~ ^[Yy]$ ]]; then
             print_info "Updating Homebrew and reinstalling maiass..."
             brew update
-            brew reinstall maiass
-            
+            brew reinstall "$BINARY_NAME"
+
             print_info "Testing version detection..."
-            if command -v maiass >/dev/null 2>&1; then
-                maiass -v
+            if command -v "$BINARY_NAME" >/dev/null 2>&1; then
+                $BINARY_NAME -v
                 print_success "Installation test completed!"
+                # uninstall?
+                read -p "Uninstall $BINARY_NAME now? (y/N): " CONFIRM_UNINSTALL
+                if [[ "$CONFIRM_UNINSTALL" =~ ^[Yy]$ ]]; then
+                    print_info "Uninstalling $BINARY_NAME..."
+                    brew uninstall "$BINARY_NAME"
+                fi
             else
-                print_warning "maiass command not found. You may need to restart your terminal."
+                print_warning "$BINARY_NAME command not found. You may need to restart your terminal."
             fi
         else
             print_info "Skipping installation test"
@@ -230,3 +258,25 @@ fi
 
 echo
 print_success "MAIASS Homebrew Formula update process completed!"
+echo
+read -p "Create GitHub release for version $NEW_VERSION? (y/N): " CONFIRM_RELEASE
+if [[ "$CONFIRM_RELEASE" =~ ^[Yy]$ ]]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    print_error "GitHub CLI (gh) is not installed. Please install it with: brew install gh"
+    exit 1
+  fi
+
+  print_info "Creating GitHub release v$NEW_VERSION..."
+  gh release create "v$NEW_VERSION" \
+    --title "v$NEW_VERSION" \
+    --notes "Automated release for version $NEW_VERSION" \
+    --repo "$REPO"
+
+  if [[ $? -eq 0 ]]; then
+    print_success "GitHub release created successfully."
+  else
+    print_error "GitHub release creation failed."
+  fi
+else
+  print_info "Skipping GitHub release creation."
+fi
