@@ -1,10 +1,10 @@
 class Miass < Formula
     desc "Alias for MAIASS"
     homepage "https://github.com/vsmash/maiass"
-    url "https://github.com/vsmash/maiass/archive/refs/tags/4.8.24.tar.gz"
-    sha256 "f203c304f1d7e4b82b85e38f0010ba2456c87ab0d28a826601ab20e542ff2453"
+    url "https://github.com/vsmash/maiass/archive/refs/tags/4.8.25.tar.gz"
+    sha256 "90c25d8adfbdeb8941f2d3bae22f29f96086f63015d80bac2de63bd632bb1447"
     license "GPL-3.0-only"
-    version "4.8.24"
+    version "4.8.25"
 
     depends_on "bash"
     depends_on "jq"
