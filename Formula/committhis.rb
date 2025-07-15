@@ -1,10 +1,10 @@
 class committhis < Formula
     desc "AI powered Git commit messages"
     homepage "https://github.com/vsmash/committhis"
-    url "https://github.com/vsmash/committhis/archive/refs/tags/4.8.28.tar.gz"
-    sha256 "0ac8ba9409777338e3618975a049df29280be7ed17196c8df4376589921e417c"
+    url "https://github.com/vsmash/committhis/archive/refs/tags/4.8.32.tar.gz"
+    sha256 "af70c76ebc98c29716291a3bcada44bb259373998727ea4d72274b2525212e09"
     license "GPL-3.0-only"
-    version "4.8.28"
+    version "4.8.32"
 
     depends_on "bash"
     depends_on "jq"
