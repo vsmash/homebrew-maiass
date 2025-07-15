@@ -19,7 +19,7 @@ portable_sed() {
 
 # --- Configurable by brand ---
 if [[ -z "$1" ]]; then
-  for brand in maiass aicommit; do
+  for brand in maiass committhis; do
     echo
     echo -e "\033[1;35m🔁 Running updater for: $brand\033[0m"
     "$0" "$brand" || exit 1  # Don't use exec — allow loop to continue
@@ -33,13 +33,13 @@ if [[ "$BRAND" == "maiass" ]]; then
   REPO="vsmash/maiass"
   FORMULAS=("Formula/maiass.rb" "Formula/myass.rb" "Formula/miass.rb")
   BINARY_NAME="maiass"
-elif [[ "$BRAND" == "aicommit" ]]; then
-  REPO="vsmash/aicommit"
-  FORMULAS=("Formula/aicommit.rb" "Formula/ai.rb" "Formula/committhis.rb")
-  BINARY_NAME="aicommit"
+elif [[ "$BRAND" == "committhis" ]]; then
+  REPO="vsmash/committhis"
+  FORMULAS=("Formula/committhis.rb" "Formula/ai.rb" "Formula/committhis.rb")
+  BINARY_NAME="committhis"
 else
   echo "Usage: $0 <brand>"
-  echo "Supported brands: maiass, aicommit"
+  echo "Supported brands: maiass, committhis"
   exit 1
 fi
 
@@ -171,18 +171,3 @@ if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
 fi
 
 echo
-printf "Create GitHub release for v$NEW_VERSION? (y/N): "
-read CONFIRM_RELEASE
-if [[ "$CONFIRM_RELEASE" =~ ^[Yy]$ ]]; then
-  if ! command -v gh >/dev/null 2>&1; then
-    print_error "GitHub CLI (gh) not found. Run: brew install gh"
-    exit 1
-  fi
-
-  gh release create "v$NEW_VERSION" \
-    --title "v$NEW_VERSION" \
-    --notes "Automated release for version $NEW_VERSION" \
-    --repo "$REPO" && print_success "Release created." || print_error "Release failed."
-else
-  print_info "Skipped release."
-fi
