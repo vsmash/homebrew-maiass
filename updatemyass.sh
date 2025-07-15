@@ -3,17 +3,32 @@
 
 set -e
 
+# --- Platform-compatible inline sed ---
+portable_sed() {
+  local expr="$1"
+  local file="$2"
+
+  if sed --version >/dev/null 2>&1; then
+    # GNU sed
+    sed -i.bak "$expr" "$file"
+  else
+    # BSD/macOS sed
+    sed -i '' "$expr" "$file"
+  fi
+}
+
 # --- Configurable by brand ---
 if [[ -z "$1" ]]; then
   for brand in maiass aicommit; do
     echo
     echo -e "\033[1;35m🔁 Running updater for: $brand\033[0m"
-    exec "$0" "$brand"
+    "$0" "$brand" || exit 1  # Don't use exec — allow loop to continue
   done
   exit 0
 else
-  BRAND="${1,,}" # Lowercase
+  BRAND=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 fi
+
 if [[ "$BRAND" == "maiass" ]]; then
   REPO="vsmash/maiass"
   FORMULAS=("Formula/maiass.rb" "Formula/myass.rb" "Formula/miass.rb")
@@ -27,7 +42,6 @@ else
   echo "Supported brands: maiass, aicommit"
   exit 1
 fi
-set -e  # Exit on any error
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,247 +50,139 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
-print_info() {
-    echo -e "${BLUE}ℹ ${1}${NC}"
-}
-
-print_success() {
-    echo -e "${GREEN}✔ ${1}${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠ ${1}${NC}"
-}
-
-print_error() {
-    echo -e "${RED}✗ ${1}${NC}"
-}
+print_info() { echo -e "${BLUE}ℹ $1${NC}"; }
+print_success() { echo -e "${GREEN}✔ $1${NC}"; }
+print_warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
+print_error() { echo -e "${RED}✗ $1${NC}"; }
 
 print_info "MAIASS Homebrew Formula Updater"
 echo "═══════════════════════════════════════════════════════════════"
 
-# Step 1: Fetch latest version from maiass repo package.json
-print_info "Fetching latest version from maiass repository..."
+# Step 1: Fetch version
+print_info "Fetching latest version from $REPO..."
 PACKAGE_JSON_URL="https://raw.githubusercontent.com/$REPO/main/package.json"
 
-# Try to fetch the package.json and extract version
 if command -v curl >/dev/null 2>&1; then
-    FETCHED_VERSION=$(curl -s "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
+  FETCHED_VERSION=$(curl -s "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
 elif command -v wget >/dev/null 2>&1; then
-    FETCHED_VERSION=$(wget -qO- "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
+  FETCHED_VERSION=$(wget -qO- "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
 else
-    print_error "Neither curl nor wget found. Cannot fetch version from remote."
-    FETCHED_VERSION=""
+  print_error "Neither curl nor wget found."
+  FETCHED_VERSION=""
 fi
 
 if [[ -n "$FETCHED_VERSION" ]]; then
-    print_success "Found version: $FETCHED_VERSION"
+  print_success "Found version: $FETCHED_VERSION"
 else
-    print_warning "Could not fetch version from remote repository"
-    FETCHED_VERSION="4.5.1"  # Fallback to current version
+  print_warning "Could not fetch version. Using fallback."
+  FETCHED_VERSION="4.5.1"
 fi
 
-# Step 2: Prompt for new version with default
 echo
-if [[ -n "$FETCHED_VERSION" ]]; then
-    read -p "Enter new version (default: $FETCHED_VERSION): " NEW_VERSION
-    NEW_VERSION=${NEW_VERSION:-$FETCHED_VERSION}
-else
-    read -p "Enter new version: " NEW_VERSION
-fi
+printf "Enter new version (default: %s): " "$FETCHED_VERSION"
+read NEW_VERSION
+NEW_VERSION=${NEW_VERSION:-$FETCHED_VERSION}
 
 if [[ -z "$NEW_VERSION" ]]; then
-    print_error "Version cannot be empty"
-    exit 1
+  print_error "Version cannot be empty"
+  exit 1
 fi
 
 print_info "Using version: $NEW_VERSION"
 
-# Step 3: Construct tag URL and check if it exists
 TAG_URL="https://github.com/$REPO/archive/refs/tags/${NEW_VERSION}.tar.gz"
 print_info "Checking if tag exists: $TAG_URL"
 
-# Check if the tag URL exists (follow redirects)
 if command -v curl >/dev/null 2>&1; then
-    HTTP_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$TAG_URL")
+  HTTP_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$TAG_URL")
 elif command -v wget >/dev/null 2>&1; then
-    if wget --spider -q "$TAG_URL" 2>/dev/null; then
-        HTTP_STATUS="200"
-    else
-        HTTP_STATUS="404"
-    fi
-else
-    print_error "Neither curl nor wget found. Cannot check tag existence."
-    exit 1
+  wget --spider -q "$TAG_URL" && HTTP_STATUS=200 || HTTP_STATUS=404
 fi
 
 if [[ "$HTTP_STATUS" != "200" ]]; then
-    print_error "Tag $NEW_VERSION does not exist or is not accessible (HTTP $HTTP_STATUS)"
-    print_error "Please ensure the tag exists at: $TAG_URL"
-    exit 1
+  print_error "Tag $NEW_VERSION not accessible (HTTP $HTTP_STATUS)"
+  exit 1
 fi
+print_success "Tag is accessible"
 
-print_success "Tag exists and is accessible"
+# Step 4: Download and compute SHA256
+TEMP_FILE="/tmp/${BINARY_NAME}-${NEW_VERSION}.tar.gz"
+print_info "Downloading tarball..."
+curl -sL "$TAG_URL" -o "$TEMP_FILE"
 
-# Step 4: Download tarball and compute SHA256
-print_info "Downloading tarball to compute SHA256..."
-TEMP_FILE="/tmp/maiass-${NEW_VERSION}.tar.gz"
+[[ -f "$TEMP_FILE" ]] || { print_error "Failed to download tarball"; exit 1; }
 
-if command -v curl >/dev/null 2>&1; then
-    curl -sL "$TAG_URL" -o "$TEMP_FILE"
-elif command -v wget >/dev/null 2>&1; then
-    wget -q "$TAG_URL" -O "$TEMP_FILE"
-fi
-
-if [[ ! -f "$TEMP_FILE" ]]; then
-    print_error "Failed to download tarball"
-    exit 1
-fi
-
-# Compute SHA256
 if command -v shasum >/dev/null 2>&1; then
-    NEW_SHA256=$(shasum -a 256 "$TEMP_FILE" | cut -d' ' -f1)
+  NEW_SHA256=$(shasum -a 256 "$TEMP_FILE" | cut -d' ' -f1)
 elif command -v sha256sum >/dev/null 2>&1; then
-    NEW_SHA256=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
+  NEW_SHA256=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
 else
-    print_error "Neither shasum nor sha256sum found. Cannot compute SHA256."
-    rm -f "$TEMP_FILE"
-    exit 1
+  print_error "No SHA256 utility available."
+  rm -f "$TEMP_FILE"
+  exit 1
 fi
-
+rm -f "$TEMP_FILE"
 print_success "SHA256: $NEW_SHA256"
 
-# Clean up temp file
-rm -f "$TEMP_FILE"
-
-# Step 5: Update all formula files
-print_info "Updating formula files..."
-
+# Step 5: Update formulas
 for FORMULA_FILE in "${FORMULAS[@]}"; do
-    if [[ ! -f "$FORMULA_FILE" ]]; then
-        print_warning "Formula file not found: $FORMULA_FILE"
-        continue
-    fi
+  if [[ ! -f "$FORMULA_FILE" ]]; then
+    print_warning "Missing formula: $FORMULA_FILE"
+    continue
+  fi
+  print_info "Updating $FORMULA_FILE"
+  cp "$FORMULA_FILE" "${FORMULA_FILE}.backup"
 
-    print_info "Updating $FORMULA_FILE..."
+  portable_sed "s|url \".*\"|url \"$TAG_URL\"|" "$FORMULA_FILE"
+  portable_sed "s/sha256 \".*\"/sha256 \"$NEW_SHA256\"/" "$FORMULA_FILE"
+  portable_sed "s/version \".*\"/version \"$NEW_VERSION\"/" "$FORMULA_FILE"
 
-    # Create backup
-    cp "$FORMULA_FILE" "${FORMULA_FILE}.backup"
-
-    # Update URL
-    sed -i.tmp "s|url \"https://github.com/vsmash/maiass/archive/refs/tags/[^\"]*\"|url \"$TAG_URL\"|g" "$FORMULA_FILE"
-
-    # Update SHA256
-    sed -i.tmp "s/sha256 \"[^\"]*\"/sha256 \"$NEW_SHA256\"/g" "$FORMULA_FILE"
-
-    # Update version
-    sed -i.tmp "s/version \"[^\"]*\"/version \"$NEW_VERSION\"/g" "$FORMULA_FILE"
-
-    # Clean up temp files
-    rm -f "${FORMULA_FILE}.tmp"
-
-    print_success "Updated $FORMULA_FILE"
+  print_success "Updated $FORMULA_FILE"
 done
 
-print_success "All formula files updated successfully!"
-echo
-print_info "Summary:"
-echo "  Version: $NEW_VERSION"
-echo "  URL: $TAG_URL"
-echo "  SHA256: $NEW_SHA256"
-echo
-print_info "Backup files created with .backup extension"
-
-# Step 6: Automated git operations with confirmations
-echo
-print_info "Now let's handle the git workflow..."
-echo
-
-# Show git diff
-print_info "Showing changes made to formula files:"
-echo
+print_info "Showing changes:"
 git diff --color=always
 echo
 
-# Confirm to proceed with git operations
-read -p "Do you want to commit and push these changes? (y/N): " CONFIRM_GIT
+# Step 6: Git operations
+printf "Do you want to commit and push? (y/N): "
+read CONFIRM_GIT
 if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
-    # Add files
-    print_info "Adding files to git..."
-    git add Formula/
+  git add Formula/
+  git commit -m "Update to version $NEW_VERSION"
+  printf "Push to remote? (y/N): "
+  read CONFIRM_PUSH
+  if [[ "$CONFIRM_PUSH" =~ ^[Yy]$ ]]; then
+    git push
+    print_success "Changes pushed"
 
-    # Commit changes
-    COMMIT_MSG="Update to version $NEW_VERSION"
-    print_info "Committing changes with message: '$COMMIT_MSG'"
-    git commit -m "$COMMIT_MSG"
-
-    # Ask about pushing
-    read -p "Push to remote repository? (y/N): " CONFIRM_PUSH
-    if [[ "$CONFIRM_PUSH" =~ ^[Yy]$ ]]; then
-        print_info "Pushing to remote..."
-        git push
-        print_success "Changes pushed successfully!"
-
-        # Ask about testing installation
-        echo
-        read -p "Test the Homebrew installation now? (y/N): " CONFIRM_TEST
-        if [[ "$CONFIRM_TEST" =~ ^[Yy]$ ]]; then
-            print_info "Updating Homebrew and reinstalling maiass..."
-            brew update
-            brew reinstall "$BINARY_NAME"
-
-            print_info "Testing version detection..."
-            if command -v "$BINARY_NAME" >/dev/null 2>&1; then
-                $BINARY_NAME -v
-                print_success "Installation test completed!"
-                # uninstall?
-                read -p "Uninstall $BINARY_NAME now? (y/N): " CONFIRM_UNINSTALL
-                if [[ "$CONFIRM_UNINSTALL" =~ ^[Yy]$ ]]; then
-                    print_info "Uninstalling $BINARY_NAME..."
-                    brew uninstall "$BINARY_NAME"
-                fi
-            else
-                print_warning "$BINARY_NAME command not found. You may need to restart your terminal."
-            fi
-        else
-            print_info "Skipping installation test"
-            print_warning "Remember to test later with: brew update && brew reinstall maiass"
-        fi
-    else
-        print_info "Skipping push to remote"
-        print_warning "Remember to push later with: git push"
+    # Test install
+    printf "Test Homebrew install? (y/N): "
+    read CONFIRM_TEST
+    if [[ "$CONFIRM_TEST" =~ ^[Yy]$ ]]; then
+      brew update
+      brew reinstall "$BINARY_NAME"
+      "$BINARY_NAME" -v || print_warning "$BINARY_NAME not found"
+      printf "Uninstall $BINARY_NAME? (y/N): "
+      read CONFIRM_UNINSTALL
+      [[ "$CONFIRM_UNINSTALL" =~ ^[Yy]$ ]] && brew uninstall "$BINARY_NAME"
     fi
-else
-    print_info "Skipping git operations"
-    print_warning "Manual steps to complete:"
-    echo "  1. Review the changes: git diff"
-    echo "  2. Commit the changes: git add . && git commit -m 'Update to version $NEW_VERSION'"
-    echo "  3. Push to remote: git push"
-    echo "  4. Test the installation: brew update && brew reinstall maiass"
+  fi
 fi
 
 echo
-print_success "MAIASS Homebrew Formula update process completed!"
-echo
-read -p "Create GitHub release for version $NEW_VERSION? (y/N): " CONFIRM_RELEASE
+printf "Create GitHub release for v$NEW_VERSION? (y/N): "
+read CONFIRM_RELEASE
 if [[ "$CONFIRM_RELEASE" =~ ^[Yy]$ ]]; then
   if ! command -v gh >/dev/null 2>&1; then
-    print_error "GitHub CLI (gh) is not installed. Please install it with: brew install gh"
+    print_error "GitHub CLI (gh) not found. Run: brew install gh"
     exit 1
   fi
 
-  print_info "Creating GitHub release v$NEW_VERSION..."
   gh release create "v$NEW_VERSION" \
     --title "v$NEW_VERSION" \
     --notes "Automated release for version $NEW_VERSION" \
-    --repo "$REPO"
-
-  if [[ $? -eq 0 ]]; then
-    print_success "GitHub release created successfully."
-  else
-    print_error "GitHub release creation failed."
-  fi
+    --repo "$REPO" && print_success "Release created." || print_error "Release failed."
 else
-  print_info "Skipping GitHub release creation."
+  print_info "Skipped release."
 fi
