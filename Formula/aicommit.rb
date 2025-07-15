@@ -1,10 +1,10 @@
 class Aicommit < Formula
     desc "AI powered Git commit messages"
     homepage "https://github.com/vsmash/aicommit"
-    url "https://github.com/vsmash/aicommit/archive/refs/tags/4.8.14.tar.gz"
-    sha256 "78b43d229eaacf769658996fc0e4da4fcc62ce6e3e2e3045c97c085b7d3c1342"
+    url "https://github.com/vsmash/aicommit/archive/refs/tags/4.8.22.tar.gz"
+    sha256 "b686d5de97f239140bbdb6574469df8b787c638c48a6651f96bb5bdf403a8142"
     license "GPL-3.0-only"
-    version "4.8.14"
+    version "4.8.22"
 
     depends_on "bash"
     depends_on "jq"
