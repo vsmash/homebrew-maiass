@@ -5,6 +5,7 @@ class Committhis < Formula
     sha256 "af70c76ebc98c29716291a3bcada44bb259373998727ea4d72274b2525212e09"
     license "GPL-3.0-only"
     version "4.8.32"
+    conflicts_with "maiass", because: "both install overlapping binaries"
 
     depends_on "bash"
     depends_on "jq"
@@ -12,14 +13,13 @@ class Committhis < Formula
     def install
         bin.install "maiass.sh" => "maiass"
         bin.install "committhis.sh" => "committhis"
-        bin.install "package.json"
         bin.install_symlink "committhis" => "aic"
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
     end
 
     test do
-      assert_match "MAIASS", shell_output("#{bin}/maiass --help")
+      assert_match "COMMITTHIS", shell_output("#{bin}/committhis --help")
     end
   end
 
@@ -28,8 +28,8 @@ class Committhis < Formula
       🧠 MAIASS has been installed!
 
       You can now use:
-        maiass       # Main command
-        myass, miass # Shortcut aliases
+        committhis       # Main command
+        aic # Shortcut aliases
 
       To view usage:
         maiass --help
