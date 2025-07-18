@@ -1,10 +1,10 @@
 class Committhis < Formula
     desc "AI powered Git commit messages"
     homepage "https://github.com/vsmash/committhis"
-    url "https://github.com/vsmash/committhis/archive/refs/tags/4.10.15.tar.gz"
-    sha256 "bcd43cfb9310cd59445029591d66cf98bd5e4f64f6068c556ea9672bcc390605"
+    url "https://github.com/vsmash/committhis/archive/refs/tags/4.10.17.tar.gz"
+    sha256 "2c4cb3d3ae3a3b42ba8e317fe49f83796fe8fb2170a4bb2c9e66a22074982ee7"
     license "GPL-3.0-only"
-    version "4.10.15"
+    version "4.10.17"
     conflicts_with "maiass", because: "both install overlapping binaries"
 
     depends_on "bash"
