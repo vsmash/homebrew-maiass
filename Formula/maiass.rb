@@ -8,16 +8,16 @@ class Maiass < Formula
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-macos-x64.zip"
-      sha256 "20595b682b1804f335100adfa95e7b442785ee9d7a61f403baadf08964197916"
+      sha256 "383ca3c9bd8f2c027fe8be9004d0400691ba8fce640718a3771f0e812e7ca350"
     else
       url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-macos-arm64.zip"
-      sha256 "901feb3554dafeb4a5381ee5f067bcd612c1ffbb655fd1415c5e0152397e2c64"
+      sha256 "09a677ee3ba1d3de98b12f223ec826ed4315875b995c8a70b4be80832fed1ed0"
     end
   end
 
   on_linux do
     url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-linux-x64.tar.gz"
-    sha256 "882eb096f0b1c6a97ff7d6b9b9e1c91a54e0577f695ce6740d4fa2b0dd4e89d3"
+    sha256 "add005ffb04fd9439d7c83e1725284b186ab99afebcc4345f0f698259e2c55a3"
   end
 
   def install
