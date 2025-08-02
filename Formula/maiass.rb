@@ -2,22 +2,22 @@ class Maiass < Formula
   desc "MAIASS: Modular AI-Augmented Semantic Scribe - CLI tool for AI-augmented development"
   homepage "https://github.com/vsmash/maiass"
   url "https://github.com/vsmash/maiass/archive/refs/tags/#{version}.tar.gz"
-  version "5.3.3"
+  version "5.3.4"
 
   license "GPL-3.0-only"
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-macos-x64"
-      sha256 "a559b88904aa2139abc78a5dc72b05291999811ca5f894a0e2c6e348765951bb"
+      sha256 "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
     else
       url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-macos-arm64"
-      sha256 "c13bc0548d803a0243c5b763aca1630c588822b24957291cfa72121b2c86be18"
+      sha256 "2e9d185e183bc43717282e1d029a171143b1fddb652bd4f148cf5134b9dfeb0a"
     end
   end
 
   on_linux do
     url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-linux-x64"
-    sha256 "fbf64d4fa4c87037e90b81c900970cd5314406636b4c3cce9d26a7104cabf80a"
+    sha256 "122d85e201f3a373e07180686ead18b37461f4785974b29c1bc0c94bd7e013a8"
   end
 
   def install
