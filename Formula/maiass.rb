@@ -1,25 +1,30 @@
 class Maiass < Formula
   desc "MAIASS: Modular AI-Augmented Semantic Scribe - CLI tool for AI-augmented development"
   homepage "https://github.com/vsmash/maiass"
-  # Note: This formula requires manual installation due to private repository
-  # Use: brew install --build-from-source Formula/maiass.rb
-  url "file:///dev/null"  # Placeholder - requires local build
-  sha256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"  # Empty file hash
-  version "5.2.8"
+  url "https://github.com/vsmash/maiass/archive/refs/tags/#{version}.tar.gz"
+  version "5.2.9"
 
   license "GPL-3.0-only"
+  on_macos do
+    if Hardware::CPU.intel?
+      url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-macos-intel"
+      sha256 "dee85c7187534da2c15cfa379e35da1144c1ddf4a25ce93766eb3c6fa4e18da3"
+    else
+      url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-macos-arm64"
+      sha256 "54866706a8cf77511695b4ca2ffdff10de14743e2212a4d6d093d82b7325fde3"
+    end
+  end
+
+  on_linux do
+    url "https://github.com/vsmash/maiass/releases/download/#{version}/maiass-linux-x64"
+    sha256 "85e7ba47d65bad2e07f526e00171a0eaa897088306d678ed2fa1fb7adc8a39f5"
+  end
 
   def install
-    odie <<~EOS
-      This formula requires access to a private repository.
-      
-      To install MAIASS:
-      1. Clone the repository manually: git clone https://github.com/vsmash/maiass.git
-      2. Build locally: cd maiass && npm install && npm run build
-      3. Copy binary to: #{bin}/maiass
-      
-      Or contact the maintainer to make releases public.
-    EOS
+    bin.install Dir["maiass-*"].first => "maiass"
+    bin.install_symlink "maiass" => "myass"
+    bin.install_symlink "maiass" => "miass"
+
   end
 
   test do
