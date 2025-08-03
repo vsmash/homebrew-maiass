@@ -13,7 +13,13 @@ class Myass < Formula
         bin.install "maiass.sh" => "maiass"
         bin.install "committhis.sh" => "committhis"
         bin.install "package.json"
-        libexec.install Dir["lib/**/*"]
+        files = Dir["lib/**/*"]
+        odie "No files found to install" if files.empty?
+        puts "Files being installed to libexec:"
+        files.each { |f| puts f }
+
+        libexec.install files
+        bin.install "maiass.sh" => "maiass"
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
     end

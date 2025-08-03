@@ -10,12 +10,18 @@ class Miass < Formula
     depends_on "jq"
 
     def install
-      bin.install "maiass.sh" => "maiass"
-      bin.install "committhis.sh" => "committhis"
-      libexec.install Dir["lib/**/*"]
-      bin.install "package.json"
-      bin.install_symlink "maiass" => "myass"
-      bin.install_symlink "maiass" => "miass"
+        bin.install "maiass.sh" => "maiass"
+        bin.install "committhis.sh" => "committhis"
+        bin.install "package.json"
+        files = Dir["lib/**/*"]
+        odie "No files found to install" if files.empty?
+        puts "Files being installed to libexec:"
+        files.each { |f| puts f }
+
+        libexec.install files
+        bin.install "maiass.sh" => "maiass"
+        bin.install_symlink "maiass" => "myass"
+        bin.install_symlink "maiass" => "miass"
     end
 
     test do
