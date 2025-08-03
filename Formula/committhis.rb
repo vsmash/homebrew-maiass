@@ -14,11 +14,7 @@ class Committhis < Formula
         bin.install "maiass.sh" => "maiass"
         bin.install "committhis.sh" => "committhis"
         bin.install "package.json"
-        files = Dir["lib/**/*"]
-        odie "No files found to install" if files.empty?
-        puts "Files being installed to libexec:"
-        files.each { |f| puts f }
-
+        libexec.install "lib"
         libexec.install files
         bin.install "maiass.sh" => "maiass"
         bin.install_symlink "committhis" => "aic"
