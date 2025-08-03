@@ -13,6 +13,10 @@ class Maiass < Formula
         bin.install "maiass.sh" => "maiass"
         bin.install "committhis.sh" => "committhis"
         bin.install "package.json"
+        bin.install "lib/core/*"
+        bin.install "lib/config/*"
+        bin.install "lib/ai/*"
+        bin.install "lib/utils/*"
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
     end
