@@ -17,7 +17,6 @@ class Maiass < Formula
         bin.install_symlink "maiass" => "miass"
         libexec.install "lib"
         # Create a wrapper script that sets up the LIBEXEC_DIR
-        chmod 0755, bin/"maiass"
     end
 
 
