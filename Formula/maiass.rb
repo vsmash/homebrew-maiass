@@ -1,10 +1,10 @@
 class Maiass < Formula
-    desc "Modular AI-Assisted Semantic Savant for Git workflows"
+    desc "Modular AI-Augmented Semantic Scribe for Git workflows"
     homepage "https://github.com/vsmash/maiass"
-    url "https://github.com/vsmash/maiass/archive/refs/tags/4.11.2.tar.gz"
-    sha256 "037c97afef2d987fc3b15a18d40039a8b7304d7b6eb5813eb7dd210bdce00019"
+    url "https://github.com/vsmash/bashmaiass/archive/refs/tags/4.14.0.tar.gz"
+    sha256 "ef11ad9c6f283b322925676a2a3706cd5c4b3b1118da580a1a6489063413b490"
     license "GPL-3.0-only"
-    version "4.11.2"
+    version "4.14.0"
 
     depends_on "bash"
     depends_on "jq"
