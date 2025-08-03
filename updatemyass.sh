@@ -31,7 +31,7 @@ fi
 
 if [[ "$BRAND" == "maiass" ]]; then
   REPO="vsmash/maiass"
-  FORMULAS=("Formula/maiass.rb" "Formula/myass.rb" "Formula/miass.rb")
+  FORMULAS=("Formula/maiass.rb")
   BINARY_NAME="maiass"
 elif [[ "$BRAND" == "committhis" ]]; then
   REPO="vsmash/committhis"
