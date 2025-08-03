@@ -15,12 +15,8 @@ class Maiass < Formula
         bin.install "package.json"
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
+        libexec.install "lib"
         # Create a wrapper script that sets up the LIBEXEC_DIR
-        (bin/"maiass").write <<~EOS
-          #!/bin/bash
-          export LIBEXEC_DIR="#{libexec}/lib"
-          exec "#{opt_bin}/maiass" "$@"
-        EOS
         chmod 0755, bin/"maiass"
     end
 
