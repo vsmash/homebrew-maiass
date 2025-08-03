@@ -16,7 +16,15 @@ class Maiass < Formula
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
     end
+    # Create a wrapper script that sets up the LIBEXEC_DIR
+    (bin/"maiass").write <<~EOS
+      #!/bin/bash
+      export LIBEXEC_DIR="#{libexec}/lib"
+      exec "#{opt_bin}/maiass" "$@"
+    EOS
 
+    # Make the wrapper executable
+    chmod 0755, bin/"maiass"
     test do
       assert_match "MAIASS", shell_output("#{bin}/maiass --help")
     end
