@@ -35,8 +35,8 @@ class Committhis < Formula
         maiass --help
 
       To enable AI commit messages:
-        export MAIASS_OPENAI_TOKEN=your_api_key
-        export MAIASS_OPENAI_MODE=ask
+        export MAIASS_AI_TOKEN=your_api_key
+        export MAIASS_AI_MODE=ask
 
       Full docs: https://github.com/vsmash/maiass
     EOS
