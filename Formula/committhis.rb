@@ -14,10 +14,10 @@ class Committhis < Formula
         bin.install "maiass.sh" => "maiass"
         bin.install "committhis.sh" => "committhis"
         bin.install "package.json"
-        bin.install "lib/core/*"
-        bin.install "lib/config/*"
-        bin.install "lib/ai/*"
-        bin.install "lib/utils/*"
+        (bin/"lib/core").install Dir["lib/core/*"]
+        (bin/"lib/config").install Dir["lib/config/*"]
+        (bin/"lib/ai").install Dir["lib/ai/*"]
+        (bin/"lib/utils").install Dir["lib/utils/*"]
         bin.install_symlink "committhis" => "aic"
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
