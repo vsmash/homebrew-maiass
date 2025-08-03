@@ -14,7 +14,6 @@ class Miass < Formula
         bin.install "committhis.sh" => "committhis"
         bin.install "package.json"
         libexec.install "lib"
-        bin.install "maiass.sh" => "maiass"
         bin.install_symlink "maiass" => "myass"
         bin.install_symlink "maiass" => "miass"
     end
