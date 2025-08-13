@@ -1,10 +1,10 @@
 class Maiass < Formula
     desc "Modular AI-Augmented Semantic Scribe for Git workflows"
     homepage "https://github.com/vsmash/maiass"
-    url "https://github.com/vsmash/maiass/archive/refs/tags/5.6.28.tar.gz"
-    sha256 "7a2da5ff227c679c64e70374486b40e0f8b31d65a2b182e41513b695f6d3223e"
+    url "https://github.com/vsmash/maiass/archive/refs/tags/5.7.0.tar.gz"
+    sha256 "781e3b7cb5d2cfefc289e9783a623d7acdbccecd2d74dbe7eea9ca7b68aec375"
     license "GPL-3.0-only"
-    version "5.6.28"
+    version "5.7.0"
     conflicts_with "committhis", because: "both install overlapping binaries"
 
     depends_on "bash"
