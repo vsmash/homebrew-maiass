@@ -1,2 +1,4 @@
 *.rb.backup
 devlog.csv
+# MAIASS log file
+maiass.log
