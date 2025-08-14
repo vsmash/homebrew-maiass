@@ -1,30 +1,26 @@
 class Maiass < Formula
-    desc "Modular AI-Augmented Semantic Scribe for Git workflows"
-    homepage "https://github.com/vsmash/maiass"
-    url "https://github.com/vsmash/maiass/archive/refs/tags/5.7.0.tar.gz"
-    sha256 "781e3b7cb5d2cfefc289e9783a623d7acdbccecd2d74dbe7eea9ca7b68aec375"
-    license "GPL-3.0-only"
-    version "5.7.0"
-    conflicts_with "committhis", because: "both install overlapping binaries"
+  desc "Modular AI-Augmented Semantic Scribe for Git workflows"
+  homepage "https://maiass.net"
+  url "https://releases.maiass.net/bash/5.7.1/bashmaiass-5.7.1.tar.gz"
+  sha256 "55dbc977ea6d387f72618a4557eda64418c561984191d3ad4cef1b2bff83f5b4"
+  license "GPL-3.0-only"
+  version "5.7.1"
+  
+  depends_on "bash"
+  depends_on "jq"
 
-    depends_on "bash"
-    depends_on "jq"
+  def install
+    bin.install "maiass.sh" => "maiass"
+    bin.install "bundle.sh" => "committhis"
+    libexec.install "lib"
+    
+    # Create symlinks for convenience
+    bin.install_symlink "maiass" => "myass"
+    bin.install_symlink "maiass" => "miass"
+  end
 
-    def install
-        bin.install "maiass.sh" => "maiass"
-        bin.install "committhis.sh" => "committhis"
-        bin.install "package.json"
-        bin.install_symlink "maiass" => "myass"
-        bin.install_symlink "maiass" => "miass"
-        libexec.install "lib"
-        # Create a wrapper script that sets up the LIBEXEC_DIR
-    end
-
-
-    # Make the wrapper executable
-    test do
-      assert_match "MAIASS", shell_output("#{bin}/maiass --help")
-    end
+  test do
+    assert_match "MAIASS", shell_output("#{bin}/maiass --version")
   end
 
   def caveats
@@ -42,6 +38,7 @@ class Maiass < Formula
         export MAIASS_AI_TOKEN=your_api_key
         export MAIASS_AI_MODE=ask
 
-      Full docs: https://github.com/vsmash/bashmaiass
+      Full docs: https://maiass.net
     EOS
   end
+end
