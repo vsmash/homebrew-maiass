@@ -26,18 +26,11 @@ class Maiass < Formula
   end
 
   def check_existing_installation
-    # Check if maiass is already installed via Homebrew
-    if system("brew", "list", "maiass", out: File::NULL, err: File::NULL)
-      puts "⚠️  Warning: maiass is already installed via Homebrew"
-      puts "   This will upgrade the existing installation."
-      puts
-    end
-    
     # Check for global npm installation
     npm_maiass_path = nil
-    if system("which", "maiass", out: File::NULL, err: File::NULL)
-      npm_maiass_path = `which maiass`.strip
-      if npm_maiass_path.include?("/node_modules/") || npm_maiass_path.include?("/npm/")
+    begin
+      npm_maiass_path = `which maiass 2>/dev/null`.strip
+      if !npm_maiass_path.empty? && (npm_maiass_path.include?("/node_modules/") || npm_maiass_path.include?("/npm/"))
         puts "⚠️  Warning: maiass is already installed globally via npm"
         puts "   Path: #{npm_maiass_path}"
         puts
@@ -64,6 +57,8 @@ class Maiass < Formula
           exit 1
         end
       end
+    rescue => e
+      # Ignore errors, continue with installation
     end
     
     # Check for existing symlinks that might conflict
