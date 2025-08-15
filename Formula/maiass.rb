@@ -2,7 +2,7 @@ class Maiass < Formula
   desc "Modular AI-Augmented Semantic Scribe for Git workflows"
   homepage "https://maiass.net"
   url "https://releases.maiass.net/bash/5.7.11/maiass-5.7.11.tar.gz"
-  sha256 "896b2cca82bf05db26f28b00f90bfec14da1fb2f230e4f41fe6b5ac8571217ac"
+  sha256 "9c783ad282f9bb45ba30226d50b9fc5ddc115832a44548e22139ed4d12796a44"
   license "GPL-3.0-only"
   version "5.7.11"
   
