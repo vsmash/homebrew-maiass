@@ -10,6 +10,9 @@ class Maiass < Formula
   depends_on "jq"
 
   def install
+    # Check for existing maiass installation
+    check_existing_installation
+    
     bin.install "maiass.sh" => "maiass"
     
     # Install lib directory if it exists
@@ -20,6 +23,56 @@ class Maiass < Formula
     # Create symlinks for convenience
     bin.install_symlink "maiass" => "myass"
     bin.install_symlink "maiass" => "miass"
+  end
+
+  def check_existing_installation
+    # Check if maiass is already installed via Homebrew
+    if system("brew", "list", "maiass", out: File::NULL, err: File::NULL)
+      puts "⚠️  Warning: maiass is already installed via Homebrew"
+      puts "   This will upgrade the existing installation."
+      puts
+    end
+    
+    # Check for global npm installation
+    npm_maiass_path = nil
+    if system("which", "maiass", out: File::NULL, err: File::NULL)
+      npm_maiass_path = `which maiass`.strip
+      if npm_maiass_path.include?("/node_modules/") || npm_maiass_path.include?("/npm/")
+        puts "⚠️  Warning: maiass is already installed globally via npm"
+        puts "   Path: #{npm_maiass_path}"
+        puts
+        puts "Options:"
+        puts "1. Remove global npm version: npm uninstall -g maiass"
+        puts "2. Continue installation (may cause conflicts)"
+        puts "3. Cancel installation"
+        puts
+        print "Choose option (1-3): "
+        choice = STDIN.gets.chomp
+        
+        case choice
+        when "1"
+          puts "Removing global npm version..."
+          system("npm", "uninstall", "-g", "maiass")
+          puts "✅ Global npm version removed"
+        when "2"
+          puts "⚠️  Continuing installation - conflicts may occur"
+        when "3"
+          puts "❌ Installation cancelled"
+          exit 1
+        else
+          puts "❌ Invalid choice, installation cancelled"
+          exit 1
+        end
+      end
+    end
+    
+    # Check for existing symlinks that might conflict
+    ["myass", "miass"].each do |symlink|
+      if File.exist?("#{HOMEBREW_PREFIX}/bin/#{symlink}")
+        puts "⚠️  Warning: #{symlink} symlink already exists"
+        puts "   This will be replaced by the Homebrew installation."
+      end
+    end
   end
 
   test do
@@ -42,6 +95,9 @@ class Maiass < Formula
         export MAIASS_AI_MODE=ask
 
       Full docs: https://maiass.net
+      
+      Note: If you had a global npm version of maiass, it has been replaced.
+      The Homebrew version takes precedence in your PATH.
     EOS
   end
 end
