@@ -33,29 +33,9 @@ class Maiass < Formula
       if !npm_maiass_path.empty? && (npm_maiass_path.include?("/node_modules/") || npm_maiass_path.include?("/npm/"))
         puts "⚠️  Warning: maiass is already installed globally via npm"
         puts "   Path: #{npm_maiass_path}"
+        puts "   The Homebrew version will take precedence in your PATH."
+        puts "   To remove the npm version, run: npm uninstall -g maiass"
         puts
-        puts "Options:"
-        puts "1. Remove global npm version: npm uninstall -g maiass"
-        puts "2. Continue installation (may cause conflicts)"
-        puts "3. Cancel installation"
-        puts
-        print "Choose option (1-3): "
-        choice = STDIN.gets.chomp
-        
-        case choice
-        when "1"
-          puts "Removing global npm version..."
-          system("npm", "uninstall", "-g", "maiass")
-          puts "✅ Global npm version removed"
-        when "2"
-          puts "⚠️  Continuing installation - conflicts may occur"
-        when "3"
-          puts "❌ Installation cancelled"
-          exit 1
-        else
-          puts "❌ Invalid choice, installation cancelled"
-          exit 1
-        end
       end
     rescue => e
       # Ignore errors, continue with installation
