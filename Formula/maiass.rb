@@ -10,9 +10,6 @@ class Maiass < Formula
   depends_on "jq"
 
   def install
-    # Check for existing maiass installation
-    check_existing_installation
-    
     bin.install "maiass.sh" => "maiass"
     
     # Install lib directory if it exists
@@ -23,31 +20,6 @@ class Maiass < Formula
     # Create symlinks for convenience
     bin.install_symlink "maiass" => "myass"
     bin.install_symlink "maiass" => "miass"
-  end
-
-  def check_existing_installation
-    # Check for global npm installation
-    npm_maiass_path = nil
-    begin
-      npm_maiass_path = `which maiass 2>/dev/null`.strip
-      if !npm_maiass_path.empty? && (npm_maiass_path.include?("/node_modules/") || npm_maiass_path.include?("/npm/"))
-        puts "⚠️  Warning: maiass is already installed globally via npm"
-        puts "   Path: #{npm_maiass_path}"
-        puts "   The Homebrew version will take precedence in your PATH."
-        puts "   To remove the npm version, run: npm uninstall -g maiass"
-        puts
-      end
-    rescue => e
-      # Ignore errors, continue with installation
-    end
-    
-    # Check for existing symlinks that might conflict
-    ["myass", "miass"].each do |symlink|
-      if File.exist?("#{HOMEBREW_PREFIX}/bin/#{symlink}")
-        puts "⚠️  Warning: #{symlink} symlink already exists"
-        puts "   This will be replaced by the Homebrew installation."
-      end
-    end
   end
 
   test do
@@ -71,8 +43,9 @@ class Maiass < Formula
 
       Full docs: https://maiass.net
       
-      Note: If you had a global npm version of maiass, it has been replaced.
-      The Homebrew version takes precedence in your PATH.
+      Note: If you have a global npm version of maiass, the Homebrew version
+      will take precedence in your PATH. To remove the npm version, run:
+      npm uninstall -g maiass
     EOS
   end
 end
