@@ -33,10 +33,14 @@ if [[ "$BRAND" == "maiass" ]]; then
   REPO="vsmash/maiass"
   FORMULAS=("Formula/maiass.rb")
   BINARY_NAME="maiass"
+  USE_R2=1
+  R2_BASE_URL="https://releases.maiass.net"
+  R2_LATEST_JSON="$R2_BASE_URL/bash/latest.json"
 elif [[ "$BRAND" == "committhis" ]]; then
   REPO="vsmash/committhis"
   FORMULAS=("Formula/committhis.rb" "Formula/ai.rb" "Formula/committhis.rb")
   BINARY_NAME="committhis"
+  USE_R2=0
 else
   echo "Usage: $0 <brand>"
   echo "Supported brands: maiass, committhis"
@@ -59,23 +63,52 @@ print_info "MAIASS Homebrew Formula Updater"
 echo "═══════════════════════════════════════════════════════════════"
 
 # Step 1: Fetch version
-print_info "Fetching latest version from $REPO..."
-PACKAGE_JSON_URL="https://raw.githubusercontent.com/$REPO/main/package.json"
+if [[ "$USE_R2" == "1" ]]; then
+  print_info "Fetching latest version from R2 metadata..."
+  if command -v curl >/dev/null 2>&1; then
+    LATEST_JSON=$(curl -fsSL "$R2_LATEST_JSON" || true)
+  elif command -v wget >/dev/null 2>&1; then
+    LATEST_JSON=$(wget -qO- "$R2_LATEST_JSON" || true)
+  else
+    print_error "Neither curl nor wget found."
+    LATEST_JSON=""
+  fi
 
-if command -v curl >/dev/null 2>&1; then
-  FETCHED_VERSION=$(curl -s "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
-elif command -v wget >/dev/null 2>&1; then
-  FETCHED_VERSION=$(wget -qO- "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
-else
-  print_error "Neither curl nor wget found."
-  FETCHED_VERSION=""
-fi
+  if [[ -n "$LATEST_JSON" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      FETCHED_VERSION=$(echo "$LATEST_JSON" | jq -r '.version // empty')
+      ARCHIVE_URL=$(echo "$LATEST_JSON" | jq -r '.archive.url // empty')
+      NEW_SHA256=$(echo "$LATEST_JSON" | jq -r '.archive.sha256 // empty')
+    else
+      # Fallback parsing without jq
+      FETCHED_VERSION=$(echo "$LATEST_JSON" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+      ARCHIVE_URL=$(echo "$LATEST_JSON" | sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\(https:\/\/[^\"]*\)".*/\1/p' | head -n1)
+      NEW_SHA256=$(echo "$LATEST_JSON" | sed -n 's/.*"sha256"[[:space:]]*:[[:space:]]*"\([a-fA-F0-9]\{64\}\)".*/\1/p' | head -n1)
+    fi
+  fi
 
-if [[ -n "$FETCHED_VERSION" ]]; then
-  print_success "Found version: $FETCHED_VERSION"
+  if [[ -n "$FETCHED_VERSION" ]]; then
+    print_success "Found version: $FETCHED_VERSION"
+  else
+    print_warning "Could not fetch version from R2 metadata."
+  fi
 else
-  print_warning "Could not fetch version. Using fallback."
-  FETCHED_VERSION="4.5.1"
+  print_info "Fetching latest version from $REPO..."
+  PACKAGE_JSON_URL="https://raw.githubusercontent.com/$REPO/main/package.json"
+  if command -v curl >/dev/null 2>&1; then
+    FETCHED_VERSION=$(curl -s "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
+  elif command -v wget >/dev/null 2>&1; then
+    FETCHED_VERSION=$(wget -qO- "$PACKAGE_JSON_URL" | grep '"version"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | tr -d '[:space:]')
+  else
+    print_error "Neither curl nor wget found."
+    FETCHED_VERSION=""
+  fi
+  if [[ -n "$FETCHED_VERSION" ]]; then
+    print_success "Found version: $FETCHED_VERSION"
+  else
+    print_warning "Could not fetch version. Using fallback."
+    FETCHED_VERSION="4.5.1"
+  fi
 fi
 
 echo
@@ -90,41 +123,83 @@ fi
 
 print_info "Using version: $NEW_VERSION"
 
-TAG_URL="https://github.com/$REPO/archive/refs/tags/${NEW_VERSION}.tar.gz"
-print_info "Checking if tag exists: $TAG_URL"
+# Step 2: Resolve source URL and SHA256
+if [[ "$USE_R2" == "1" ]]; then
+  # Build expected archive URL if metadata was missing/not matching
+  if [[ -z "$ARCHIVE_URL" ]]; then
+    ARCHIVE_URL="$R2_BASE_URL/bash/$NEW_VERSION/maiass-$NEW_VERSION.tar.gz"
+  fi
 
-if command -v curl >/dev/null 2>&1; then
-  HTTP_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$TAG_URL")
-elif command -v wget >/dev/null 2>&1; then
-  wget --spider -q "$TAG_URL" && HTTP_STATUS=200 || HTTP_STATUS=404
-fi
+  print_info "Checking R2 archive: $ARCHIVE_URL"
+  if command -v curl >/dev/null 2>&1; then
+    HTTP_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$ARCHIVE_URL")
+  else
+    wget --spider -q "$ARCHIVE_URL" && HTTP_STATUS=200 || HTTP_STATUS=404
+  fi
+  if [[ "$HTTP_STATUS" != "200" ]]; then
+    print_error "Archive not accessible (HTTP $HTTP_STATUS)"
+    exit 1
+  fi
+  print_success "Archive is accessible"
 
-if [[ "$HTTP_STATUS" != "200" ]]; then
-  print_error "Tag $NEW_VERSION not accessible (HTTP $HTTP_STATUS)"
-  exit 1
-fi
-print_success "Tag is accessible"
+  if [[ -z "$NEW_SHA256" ]]; then
+    print_info "Downloading archive to compute SHA256..."
+    TEMP_FILE="/tmp/${BINARY_NAME}-${NEW_VERSION}.tar.gz"
+    curl -fsSL "$ARCHIVE_URL" -o "$TEMP_FILE"
+    [[ -f "$TEMP_FILE" ]] || { print_error "Failed to download tarball"; exit 1; }
+    if command -v shasum >/dev/null 2>&1; then
+      NEW_SHA256=$(shasum -a 256 "$TEMP_FILE" | cut -d' ' -f1)
+    elif command -v sha256sum >/dev/null 2>&1; then
+      NEW_SHA256=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
+    else
+      print_error "No SHA256 utility available."
+      rm -f "$TEMP_FILE"
+      exit 1
+    fi
+    rm -f "$TEMP_FILE"
+    print_success "SHA256: $NEW_SHA256"
+  else
+    print_success "Using SHA256 from metadata: $NEW_SHA256"
+  fi
 
-# Step 4: Download and compute SHA256
-TEMP_FILE="/tmp/${BINARY_NAME}-${NEW_VERSION}.tar.gz"
-print_info "Downloading tarball..."
-curl -sL "$TAG_URL" -o "$TEMP_FILE"
-
-[[ -f "$TEMP_FILE" ]] || { print_error "Failed to download tarball"; exit 1; }
-
-if command -v shasum >/dev/null 2>&1; then
-  NEW_SHA256=$(shasum -a 256 "$TEMP_FILE" | cut -d' ' -f1)
-elif command -v sha256sum >/dev/null 2>&1; then
-  NEW_SHA256=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
+  SOURCE_URL="$ARCHIVE_URL"
 else
-  print_error "No SHA256 utility available."
-  rm -f "$TEMP_FILE"
-  exit 1
-fi
-rm -f "$TEMP_FILE"
-print_success "SHA256: $NEW_SHA256"
+  TAG_URL="https://github.com/$REPO/archive/refs/tags/${NEW_VERSION}.tar.gz"
+  print_info "Checking if tag exists: $TAG_URL"
+  if command -v curl >/dev/null 2>&1; then
+    HTTP_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$TAG_URL")
+  elif command -v wget >/dev/null 2>&1; then
+    wget --spider -q "$TAG_URL" && HTTP_STATUS=200 || HTTP_STATUS=404
+  fi
 
-# Step 5: Update formulas
+  if [[ "$HTTP_STATUS" != "200" ]]; then
+    print_error "Tag $NEW_VERSION not accessible (HTTP $HTTP_STATUS)"
+    exit 1
+  fi
+  print_success "Tag is accessible"
+
+  # Download and compute SHA256
+  TEMP_FILE="/tmp/${BINARY_NAME}-${NEW_VERSION}.tar.gz"
+  print_info "Downloading tarball..."
+  curl -sL "$TAG_URL" -o "$TEMP_FILE"
+  [[ -f "$TEMP_FILE" ]] || { print_error "Failed to download tarball"; exit 1; }
+
+  if command -v shasum >/dev/null 2>&1; then
+    NEW_SHA256=$(shasum -a 256 "$TEMP_FILE" | cut -d' ' -f1)
+  elif command -v sha256sum >/dev/null 2>&1; then
+    NEW_SHA256=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
+  else
+    print_error "No SHA256 utility available."
+    rm -f "$TEMP_FILE"
+    exit 1
+  fi
+  rm -f "$TEMP_FILE"
+  print_success "SHA256: $NEW_SHA256"
+
+  SOURCE_URL="$TAG_URL"
+fi
+
+# Step 3: Update formulas
 for FORMULA_FILE in "${FORMULAS[@]}"; do
   if [[ ! -f "$FORMULA_FILE" ]]; then
     print_warning "Missing formula: $FORMULA_FILE"
@@ -133,18 +208,19 @@ for FORMULA_FILE in "${FORMULAS[@]}"; do
   print_info "Updating $FORMULA_FILE"
   cp "$FORMULA_FILE" "${FORMULA_FILE}.backup"
 
-  portable_sed "s|url \".*\"|url \"$TAG_URL\"|" "$FORMULA_FILE"
+  portable_sed "s|url \".*\"|url \"$SOURCE_URL\"|" "$FORMULA_FILE"
   portable_sed "s/sha256 \".*\"/sha256 \"$NEW_SHA256\"/" "$FORMULA_FILE"
   portable_sed "s/version \".*\"/version \"$NEW_VERSION\"/" "$FORMULA_FILE"
 
   print_success "Updated $FORMULA_FILE"
+
 done
 
 print_info "Showing changes:"
 git diff --color=always
 echo
 
-# Step 6: Git operations
+# Step 4: Git operations
 printf "Do you want to commit and push? (y/N): "
 read CONFIRM_GIT
 if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then

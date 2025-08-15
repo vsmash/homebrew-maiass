@@ -2,3 +2,6 @@
 devlog.csv
 # MAIASS log file
 maiass.log
+
+# MAIASS environment file
+.env.maiass

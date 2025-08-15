@@ -23,17 +23,33 @@ echo "============================"
 BASHMAIASS_DIR="../bashmaiass"
 R2_BASE_URL="https://releases.maiass.net"
 R2_BUCKET="maiass-releases"
+ACCOUNT_ID="2ab89e92c4bd8d580f06323b9b592dd0"
 
-# Get version from maiass.sh script
-if [[ -f "$BASHMAIASS_DIR/maiass.sh" ]]; then
-    VERSION=$(grep -m1 '^# MAIASS' "$BASHMAIASS_DIR/maiass.sh" | sed -E 's/.* v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-    if [[ -z "$VERSION" || "$VERSION" == "0.0.0" ]]; then
-        print_error "Could not extract version from maiass.sh"
-        exit 1
-    fi
+# Accept version as first argument, else extract from package.json or maiass.sh
+if [[ -n "$1" ]]; then
+    VERSION="$1"
 else
-    print_error "maiass.sh not found in $BASHMAIASS_DIR"
-    exit 1
+    # Try package.json first
+    if [[ -f "$BASHMAIASS_DIR/dist/package.json" ]]; then
+        VERSION=$(jq -r '.version' "$BASHMAIASS_DIR/dist/package.json")
+        if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+            print_warning "Could not extract version from package.json"
+        fi
+    fi
+    
+    # Fallback to maiass.sh if package.json didn't work
+    if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+        if [[ -f "$BASHMAIASS_DIR/dist/maiass.sh" ]]; then
+            VERSION=$(grep -m1 '^# MAIASS' "$BASHMAIASS_DIR/dist/maiass.sh" | sed -E 's/.* v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+            if [[ -z "$VERSION" || "$VERSION" == "0.0.0" ]]; then
+                print_error "Could not extract version from maiass.sh"
+                exit 1
+            fi
+        else
+            print_error "Neither package.json nor maiass.sh found in $BASHMAIASS_DIR/dist"
+            exit 1
+        fi
+    fi
 fi
 
 print_status "Deploying MAIASS Bash v$VERSION to R2..."
@@ -45,38 +61,43 @@ if ! command -v wrangler &> /dev/null; then
     exit 1
 fi
 
-# Create temporary release directory
+# Check if dist directory exists
+if [[ ! -d "$BASHMAIASS_DIR/dist" ]]; then
+    print_error "Dist directory not found: $BASHMAIASS_DIR/dist"
+    exit 1
+fi
+
+# Create temporary release directory for Homebrew archive
 RELEASE_DIR="release-temp"
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
 
-print_status "Creating release archive..."
+print_status "Creating Homebrew release archive..."
 
-# Copy bashmaiass files to release directory
-cp -r "$BASHMAIASS_DIR"/* "$RELEASE_DIR/"
+# Copy only the files needed for Homebrew installation
+cp "$BASHMAIASS_DIR/dist/maiass.sh" "$RELEASE_DIR/"
+if [[ -f "$BASHMAIASS_DIR/dist/bundle.sh" ]]; then
+    cp "$BASHMAIASS_DIR/dist/bundle.sh" "$RELEASE_DIR/"
+fi
+if [[ -d "$BASHMAIASS_DIR/dist/lib" ]]; then
+    cp -r "$BASHMAIASS_DIR/dist/lib" "$RELEASE_DIR/"
+fi
 
-# Remove development files that shouldn't be in release
-rm -rf "$RELEASE_DIR"/.git*
-rm -rf "$RELEASE_DIR"/node_modules
-rm -f "$RELEASE_DIR"/.env*
-rm -f "$RELEASE_DIR"/maiass.log
-rm -f "$RELEASE_DIR"/devlog.csv
-
-# Create tarball
-ARCHIVE_NAME="bashmaiass-${VERSION}.tar.gz"
-print_status "Creating archive: $ARCHIVE_NAME"
+# Create tarball for Homebrew (this is what Homebrew will download)
+ARCHIVE_NAME="maiass-${VERSION}.tar.gz"
+print_status "Creating Homebrew archive: $ARCHIVE_NAME"
 
 cd "$RELEASE_DIR" || {
     print_error "Failed to enter release directory"
     exit 1
 }
 
-# Create the tarball with proper structure
+# Create the tarball with proper structure for Homebrew
 tar -czf "../$ARCHIVE_NAME" .
 cd ..
 
-# Calculate SHA256
-print_status "Calculating SHA256..."
+# Calculate SHA256 for Homebrew formula
+print_status "Calculating SHA256 for Homebrew formula..."
 if command -v shasum &> /dev/null; then
     SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | cut -d' ' -f1)
 elif command -v sha256sum &> /dev/null; then
@@ -86,7 +107,7 @@ else
     exit 1
 fi
 
-print_success "SHA256: $SHA256"
+print_success "Homebrew SHA256: $SHA256"
 
 # Create checksums file
 echo "$SHA256  $ARCHIVE_NAME" > "checksums-${VERSION}.txt"
@@ -94,6 +115,7 @@ echo "$SHA256  $ARCHIVE_NAME" > "checksums-${VERSION}.txt"
 # Upload function
 upload_file() {
     local file="$1"
+    local r2_path="$2"
     local content_type="application/octet-stream"
     
     # Determine content type based on file extension
@@ -101,13 +123,17 @@ upload_file() {
         content_type="application/gzip"
     elif [[ "$file" == *.txt ]]; then
         content_type="text/plain"
+    elif [[ "$file" == *.md ]]; then
+        content_type="text/markdown"
+    elif [[ "$file" == *.json ]]; then
+        content_type="application/json"
+    elif [[ "$file" == *.sh ]]; then
+        content_type="text/x-shellscript"
     fi
     
-    local r2_path="bash/$VERSION/$file"
-    
-    print_status "Uploading $file..."
-    
-    # Try to upload
+    print_status "Uploading $file to $r2_path..."
+
+    # Wrangler 4.x syntax: <bucket>/<key> as first argument
     if wrangler r2 object put "$R2_BUCKET/$r2_path" \
         --file "$file" \
         --content-type "$content_type" \
@@ -127,13 +153,95 @@ print_status "Uploading to R2..."
 UPLOAD_SUCCESS=0
 UPLOAD_FAILED=0
 
-if upload_file "$ARCHIVE_NAME"; then
+# Upload Homebrew archive (this is what the formula downloads)
+if upload_file "$ARCHIVE_NAME" "bash/$VERSION/$ARCHIVE_NAME"; then
     ((UPLOAD_SUCCESS++))
 else
     ((UPLOAD_FAILED++))
 fi
 
-if upload_file "checksums-${VERSION}.txt"; then
+# Upload checksums
+if upload_file "checksums-${VERSION}.txt" "bash/$VERSION/checksums-${VERSION}.txt"; then
+    ((UPLOAD_SUCCESS++))
+else
+    ((UPLOAD_FAILED++))
+fi
+
+# Upload individual files for direct access (README, docs, etc.)
+print_status "Uploading individual files for direct access..."
+
+# Upload maiass.sh for direct access
+if upload_file "$BASHMAIASS_DIR/dist/maiass.sh" "bash/$VERSION/maiass.sh"; then
+    ((UPLOAD_SUCCESS++))
+else
+    ((UPLOAD_FAILED++))
+fi
+
+# Upload README.md
+if [[ -f "$BASHMAIASS_DIR/dist/README.md" ]]; then
+    if upload_file "$BASHMAIASS_DIR/dist/README.md" "bash/$VERSION/README.md"; then
+        ((UPLOAD_SUCCESS++))
+    else
+        ((UPLOAD_FAILED++))
+    fi
+fi
+
+# Upload package.json
+if [[ -f "$BASHMAIASS_DIR/dist/package.json" ]]; then
+    if upload_file "$BASHMAIASS_DIR/dist/package.json" "bash/$VERSION/package.json"; then
+        ((UPLOAD_SUCCESS++))
+    else
+        ((UPLOAD_FAILED++))
+    fi
+fi
+
+# Upload docs directory if it exists
+if [[ -d "$BASHMAIASS_DIR/dist/docs" ]]; then
+    print_status "Uploading docs directory..."
+    for doc_file in "$BASHMAIASS_DIR/dist/docs"/*; do
+        if [[ -f "$doc_file" ]]; then
+            filename=$(basename "$doc_file")
+            if upload_file "$doc_file" "bash/$VERSION/docs/$filename"; then
+                ((UPLOAD_SUCCESS++))
+            else
+                ((UPLOAD_FAILED++))
+            fi
+        fi
+    done
+fi
+
+# Create and upload release metadata JSON
+print_status "Generating release metadata JSON..."
+RELEASE_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+METADATA_FILE="metadata-${VERSION}.json"
+cat > "$METADATA_FILE" <<EOF
+{
+  "product": "maiass-bash",
+  "version": "$VERSION",
+  "release_date": "$RELEASE_DATE",
+  "archive": {
+    "url": "$R2_BASE_URL/bash/$VERSION/$ARCHIVE_NAME",
+    "sha256": "$SHA256",
+    "filename": "$ARCHIVE_NAME"
+  },
+  "files": {
+    "script_url": "$R2_BASE_URL/bash/$VERSION/maiass.sh",
+    "readme_url": "$R2_BASE_URL/bash/$VERSION/README.md",
+    "package_url": "$R2_BASE_URL/bash/$VERSION/package.json",
+    "docs_url": "$R2_BASE_URL/bash/$VERSION/docs/"
+  }
+}
+EOF
+
+# Upload per-version metadata
+if upload_file "$METADATA_FILE" "bash/$VERSION/metadata.json"; then
+    ((UPLOAD_SUCCESS++))
+else
+    ((UPLOAD_FAILED++))
+fi
+
+# Upload top-level latest.json
+if upload_file "$METADATA_FILE" "bash/latest.json"; then
     ((UPLOAD_SUCCESS++))
 else
     ((UPLOAD_FAILED++))
@@ -143,6 +251,7 @@ fi
 rm -rf "$RELEASE_DIR"
 rm -f "$ARCHIVE_NAME"
 rm -f "checksums-${VERSION}.txt"
+rm -f "$METADATA_FILE"
 
 # Summary
 echo
@@ -158,6 +267,12 @@ if [[ $UPLOAD_FAILED -eq 0 ]]; then
     print_status "Homebrew formula should use:"
     echo "  url \"$R2_BASE_URL/bash/$VERSION/$ARCHIVE_NAME\""
     echo "  sha256 \"$SHA256\""
+    echo "  version \"$VERSION\""
+    echo
+    print_status "Direct file access:"
+    echo "  Script: $R2_BASE_URL/bash/$VERSION/maiass.sh"
+    echo "  README: $R2_BASE_URL/bash/$VERSION/README.md"
+    echo "  Docs: $R2_BASE_URL/bash/$VERSION/docs/"
     echo
     print_status "Update the formula with these values and version $VERSION"
 else

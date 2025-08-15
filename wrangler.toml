@@ -1,0 +1,33 @@
+# Wrangler configuration for MAIASS Bash R2 deployment
+# This file configures the Cloudflare R2 bucket deployment
+
+name = "maiass-bash-deploy"
+main = "scripts/deploy-to-r2.sh"
+compatibility_date = "2024-01-01"
+
+# Cloudflare account configuration
+account_id = "2ab89e92c4bd8d580f06323b9b592dd0"
+
+# R2 bucket configuration
+[[r2_buckets]]
+binding = "MAIASS_RELEASES"
+bucket_name = "maiass-releases"
+preview_bucket_name = "maiass-releases-dev"
+
+# Environment variables (optional)
+[vars]
+R2_BASE_URL = "https://releases.maiass.net"
+R2_BUCKET = "maiass-releases"
+
+# Build configuration (if needed)
+[build]
+command = "echo 'No build step required for bash deployment'"
+
+# Deployment configuration
+[env.production]
+name = "maiass-bash-production"
+account_id = "2ab89e92c4bd8d580f06323b9b592dd0"
+
+[env.staging]
+name = "maiass-bash-staging"
+account_id = "2ab89e92c4bd8d580f06323b9b592dd0"
