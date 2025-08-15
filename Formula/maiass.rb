@@ -1,10 +1,10 @@
 class Maiass < Formula
   desc "Modular AI-Augmented Semantic Scribe for Git workflows"
   homepage "https://maiass.net"
-  url "https://releases.maiass.net/bash/5.7.11/maiass-5.7.11.tar.gz"
-  sha256 "9c783ad282f9bb45ba30226d50b9fc5ddc115832a44548e22139ed4d12796a44"
+  url "https://releases.maiass.net/bash/5.7.13/maiass-5.7.13.tar.gz"
+  sha256 "900526456a40f67f7190321153d13ce4bb2073d0bd98d42b5fb767fc33b71ea4"
   license "GPL-3.0-only"
-  version "5.7.11"
+  version "5.7.13"
   
   depends_on "bash"
   depends_on "jq"
@@ -44,8 +44,11 @@ class Maiass < Formula
       Full docs: https://maiass.net
       
       Note: If you have a global npm version of maiass, the Homebrew version
-      will take precedence in your PATH. To remove the npm version, run:
+      will take precedence in your PATH.
+      To remove the npm version, run:
       npm uninstall -g maiass
+      To keep both versions, you can use the following alias:
+      myass, miass
     EOS
   end
 end
