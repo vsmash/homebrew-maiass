@@ -168,9 +168,15 @@ print_success "GitHub release ready (id=$RELEASE_ID)"
 # STEP 3: Upload tarball and ALL loose files
 print_status "(3/6) Creating tarball and uploading all assets..."
 
-# Create tarball
+# Create tarball (exclude macOS extended attributes for clean Linux installs)
 ARCHIVE_NAME="maiass-$VERSION.tar.gz"
-tar -czf "/tmp/$ARCHIVE_NAME" -C "$MAIASS_DIST_DIR" .
+if tar --version 2>/dev/null | grep -q "GNU tar"; then
+  # GNU tar (Linux)
+  tar -czf "/tmp/$ARCHIVE_NAME" -C "$MAIASS_DIST_DIR" .
+else
+  # BSD tar (macOS) - exclude extended attributes
+  tar -czf "/tmp/$ARCHIVE_NAME" -C "$MAIASS_DIST_DIR" --no-xattrs .
+fi
 upload_asset "$RELEASE_ID" "/tmp/$ARCHIVE_NAME" "$ARCHIVE_NAME" "application/gzip"
 
 # Upload all loose files from maiass-dist (avoid duplicates)
