@@ -5,18 +5,18 @@ class Maiass < Formula
   sha256 "5cf2ab506f2fdfa4bbc55aa03c7cc633d1ff3f5899d835788c7651e601b3a705"
   license "GPL-3.0-only"
   version "5.8.13"
-  
+
   depends_on "bash"
   depends_on "jq"
 
   def install
     bin.install "maiass.sh" => "maiass"
-    
+
     # Install lib directory if it exists
     if File.exist?("lib")
       libexec.install "lib"
     end
-    
+
     # Create symlinks for convenience
     bin.install_symlink "maiass" => "myass"
     bin.install_symlink "maiass" => "miass"
@@ -37,12 +37,8 @@ class Maiass < Formula
       To view usage:
         maiass --help
 
-      To enable AI commit messages:
-        export MAIASS_AI_TOKEN=your_api_key
-        export MAIASS_AI_MODE=ask
-
       Full docs: https://maiass.net
-      
+
       Note: If you have a global npm version of maiass, the Homebrew version
       will take precedence in your PATH.
       To remove the npm version, run:
