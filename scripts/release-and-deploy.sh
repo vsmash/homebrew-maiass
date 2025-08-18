@@ -1,8 +1,8 @@
 #!/bin/bash
-# Automated release script for MAIASS Bash via Cloudflare R2
-# This script creates a release, deploys to R2, and updates the Homebrew formula
+# Automated release script for MAIASS Bash via GitHub Releases
+# This script creates a release on GitHub and updates the Homebrew formula
 
-set -e
+set -euo pipefail
 
 # Colors
 RED='\033[0;31m'
@@ -16,23 +16,49 @@ print_success() { echo -e "${GREEN}✅ $1${NC}"; }
 print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_error() { echo -e "${RED}❌ $1${NC}"; }
 
-echo "🚀 MAIASS Bash Release & Deploy"
-echo "==============================="
+# Install trap AFTER functions exist
+trap 'print_error "Command failed: ${BASH_COMMAND}"' ERR
 
-# Configuration
-BASHMAIASS_DIR="../bashmaiass"
-FORMULA_FILE="Formula/maiass.rb"
-R2_BASE_URL="https://releases.maiass.net"
-
-# Get current version from maiass.sh or package.json
-CURRENT_VERSION=""
-if [[ -f "$BASHMAIASS_DIR/dist/maiass.sh" ]]; then
-    CURRENT_VERSION=$(grep -m1 '^# MAIASS' "$BASHMAIASS_DIR/dist/maiass.sh" | sed -E 's/.* v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+# Optional debug
+if [[ "${MAIASS_DEBUG:-0}" == "1" ]]; then
+  set -x
 fi
 
-if [[ -z "$CURRENT_VERSION" || "$CURRENT_VERSION" == "0.0.0" ]]; then
-    if [[ -f "$BASHMAIASS_DIR/dist/package.json" ]]; then
-        CURRENT_VERSION=$(jq -r '.version' "$BASHMAIASS_DIR/dist/package.json")
+echo "🚀 MAIASS Bash Release & Deploy (GitHub)"
+echo "========================================="
+print_status "cwd: $(pwd)"
+
+# Configuration
+# Resolve paths relative to this script for robustness regardless of cwd
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Dist lives at repo_root/bashmaiass/dist (script is in repo_root/homebrew-bashmaiass/scripts)
+MAIASS_DIST_DIR="${SCRIPT_DIR}/../../bashmaiass/dist"
+FORMULA_FILE="Formula/maiass.rb"
+
+print_status "Using dist directory: $MAIASS_DIST_DIR"
+print_status "Script directory: $SCRIPT_DIR"
+if [[ -d "$MAIASS_DIST_DIR" ]]; then
+  print_status "Dist directory exists"
+else
+  print_warning "Dist directory does not exist yet; will still try to resolve version from repo"
+fi
+
+# Preflight checks (jq is required for version parsing)
+if ! command -v jq >/dev/null 2>&1; then
+  print_error "jq is required. Install it (e.g., brew install jq) and retry."
+  exit 1
+fi
+
+# Get current version from dist/package.json or fallback to repo bashmaiass/maiass.sh
+print_status "Resolving version..."
+CURRENT_VERSION=""
+if [[ -f "$MAIASS_DIST_DIR/package.json" ]]; then
+    CURRENT_VERSION=$(jq -r '.version' "$MAIASS_DIST_DIR/package.json" || true)
+fi
+if [[ -z "$CURRENT_VERSION" || "$CURRENT_VERSION" == "null" || "$CURRENT_VERSION" == "0.0.0" ]]; then
+    REPO_MAIASS_SH="$SCRIPT_DIR/../../bashmaiass/maiass.sh"
+    if [[ -f "$REPO_MAIASS_SH" ]]; then
+        CURRENT_VERSION=$(grep -m1 '^# MAIASS' "$REPO_MAIASS_SH" | sed -E 's/.* v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
     fi
 fi
 
@@ -43,51 +69,21 @@ fi
 
 print_status "Current version: $CURRENT_VERSION"
 
-# Ask for new version
-echo
-printf "Enter new version (current: %s): " "$CURRENT_VERSION"
-read NEW_VERSION
-
-if [[ -z "$NEW_VERSION" ]]; then
-    print_warning "No version entered, using current version: $CURRENT_VERSION"
-    NEW_VERSION="$CURRENT_VERSION"
-fi
-
-# Validate version format
-if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    print_error "Invalid version format. Use semantic versioning (e.g., 5.7.1)"
-    exit 1
-fi
-
+NEW_VERSION="$CURRENT_VERSION"
 print_status "Using version: $NEW_VERSION"
 
-# Update version in maiass.sh if different
-if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
-    print_status "Updating version in maiass.sh..."
-    if [[ -f "$BASHMAIASS_DIR/maiass.sh" ]]; then
-        sed -i.bak "s/^# MAIASS.* v[0-9]\+\.[0-9]\+\.[0-9]\+/# MAIASS (Modular AI-Augmented Semantic Scribe) v$NEW_VERSION/" "$BASHMAIASS_DIR/maiass.sh"
-        rm -f "$BASHMAIASS_DIR/maiass.sh.bak"
-    fi
-    if [[ -f "$BASHMAIASS_DIR/dist/maiass.sh" ]]; then
-        sed -i.bak "s/^# MAIASS.* v[0-9]\+\.[0-9]\+\.[0-9]\+/# MAIASS (Modular AI-Augmented Semantic Scribe) v$NEW_VERSION/" "$BASHMAIASS_DIR/dist/maiass.sh"
-        rm -f "$BASHMAIASS_DIR/dist/maiass.sh.bak"
-    fi
-    print_success "Version updated in maiass.sh"
-fi
 
-# Update version in package.json if different
-if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
-    print_status "Updating version in package.json..."
-    if [[ -f "$BASHMAIASS_DIR/dist/package.json" ]]; then
-        jq ".version = \"$NEW_VERSION\"" "$BASHMAIASS_DIR/dist/package.json" > "$BASHMAIASS_DIR/dist/package.json.tmp" && mv "$BASHMAIASS_DIR/dist/package.json.tmp" "$BASHMAIASS_DIR/dist/package.json"
-    fi
-    print_success "Version updated in package.json"
-fi
 
-# Deploy to R2
-print_status "Deploying to Cloudflare R2..."
-if ! ./scripts/deploy-to-r2.sh "$NEW_VERSION"; then
-    print_error "R2 deployment failed"
+
+
+# Deploy to GitHub releases
+DEPLOY_SCRIPT="$(cd "$(dirname "$0")" && pwd)/deploy-to-github.sh"
+print_status "Deploying to GitHub releases using: $DEPLOY_SCRIPT"
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  print_warning "GITHUB_TOKEN not set; relying on gh auth token if available"
+fi
+if ! bash "$DEPLOY_SCRIPT" "$NEW_VERSION"; then
+    print_error "GitHub deployment failed"
     exit 1
 fi
 
@@ -110,8 +106,5 @@ echo "2. Test locally: brew install --build-from-source $FORMULA_FILE"
 echo "3. Commit and push changes to update the tap"
 echo "4. Users can install with: brew tap vsmash/maiass && brew install maiass"
 echo
-print_status "R2 URL: $R2_BASE_URL/bash/$NEW_VERSION/maiass-$NEW_VERSION.tar.gz"
-print_status "Direct file access:"
-echo "  Script: $R2_BASE_URL/bash/$NEW_VERSION/maiass.sh"
-echo "  README: $R2_BASE_URL/bash/$NEW_VERSION/README.md"
-echo "  Docs: $R2_BASE_URL/bash/$NEW_VERSION/docs/"
+print_status "GitHub Release: https://github.com/vsmash/maiass/releases/tag/v$NEW_VERSION"
+print_status "Archive URL: https://github.com/vsmash/maiass/releases/download/v$NEW_VERSION/maiass-$NEW_VERSION.tar.gz"

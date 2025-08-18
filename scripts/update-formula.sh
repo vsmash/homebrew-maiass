@@ -21,78 +21,79 @@ echo "=========================="
 
 # Configuration
 FORMULA_FILE="Formula/maiass.rb"
-R2_BASE_URL="https://releases.maiass.net"
+GITHUB_REPO="vsmash/maiass"
+GITHUB_BASE_URL="https://github.com/${GITHUB_REPO}/releases/download"
 
-# Accept version as first argument, else fetch from R2 metadata
+# Accept version as first argument, else fetch from GitHub releases
 if [[ -n "$1" ]]; then
     VERSION="$1"
 else
-    print_status "Fetching latest version from R2 metadata..."
-    R2_LATEST_JSON="$R2_BASE_URL/bash/latest.json"
+    print_status "Fetching latest version from GitHub releases..."
     
-    if command -v curl >/dev/null 2>&1; then
-        LATEST_JSON=$(curl -fsSL "$R2_LATEST_JSON" 2>/dev/null || true)
-    elif command -v wget >/dev/null 2>&1; then
-        LATEST_JSON=$(wget -qO- "$R2_LATEST_JSON" 2>/dev/null || true)
+    if command -v gh >/dev/null 2>&1; then
+        # Use GitHub CLI to get latest release
+        VERSION=$(gh release list --repo "$GITHUB_REPO" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null | sed 's/^v//')
     else
-        print_error "Neither curl nor wget found"
-        exit 1
-    fi
-
-    if [[ -n "$LATEST_JSON" ]]; then
-        if command -v jq >/dev/null 2>&1; then
-            VERSION=$(echo "$LATEST_JSON" | jq -r '.version // empty')
-            ARCHIVE_URL=$(echo "$LATEST_JSON" | jq -r '.archive.url // empty')
-            SHA256=$(echo "$LATEST_JSON" | jq -r '.archive.sha256 // empty')
+        # Fallback to GitHub API
+        if command -v curl >/dev/null 2>&1; then
+            LATEST_JSON=$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null || true)
+        elif command -v wget >/dev/null 2>&1; then
+            LATEST_JSON=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null || true)
         else
-            # Fallback parsing without jq
-            VERSION=$(echo "$LATEST_JSON" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
-            ARCHIVE_URL=$(echo "$LATEST_JSON" | sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\(https:\/\/[^\"]*\)".*/\1/p' | head -n1)
-            SHA256=$(echo "$LATEST_JSON" | sed -n 's/.*"sha256"[[:space:]]*:[[:space:]]*"\([a-fA-F0-9]\{64\}\)".*/\1/p' | head -n1)
+            print_error "Neither gh CLI, curl, nor wget found"
+            exit 1
+        fi
+
+        if [[ -n "$LATEST_JSON" ]]; then
+            if command -v jq >/dev/null 2>&1; then
+                VERSION=$(echo "$LATEST_JSON" | jq -r '.tag_name // empty' | sed 's/^v//')
+            else
+                # Fallback parsing without jq
+                VERSION=$(echo "$LATEST_JSON" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\?\([^"]*\)".*/\1/p' | head -n1)
+            fi
         fi
     fi
 
     if [[ -z "$VERSION" ]]; then
-        print_error "Could not fetch version from R2 metadata"
+        print_error "Could not fetch version from GitHub releases"
         exit 1
     fi
 fi
 
 print_status "Using version: $VERSION"
 
-# If we don't have the URL and SHA256 from metadata, build them
-if [[ -z "$ARCHIVE_URL" ]]; then
-    ARCHIVE_URL="$R2_BASE_URL/bash/$VERSION/maiass-$VERSION.tar.gz"
+# Build GitHub release URL and fetch SHA256
+ARCHIVE_URL="$GITHUB_BASE_URL/v$VERSION/maiass-$VERSION.tar.gz"
+
+print_status "Fetching SHA256 from GitHub release archive..."
+
+# Download the archive to compute SHA256
+TEMP_FILE="/tmp/maiass-$VERSION.tar.gz"
+if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$ARCHIVE_URL" -o "$TEMP_FILE"
+elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$TEMP_FILE" "$ARCHIVE_URL"
+else
+    print_error "Neither curl nor wget found"
+    exit 1
 fi
 
-if [[ -z "$SHA256" ]]; then
-    print_status "Fetching SHA256 from R2 archive..."
-    
-    # Download the archive to compute SHA256
-    TEMP_FILE="/tmp/maiass-$VERSION.tar.gz"
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$ARCHIVE_URL" -o "$TEMP_FILE"
-    else
-        wget -qO "$TEMP_FILE" "$ARCHIVE_URL"
-    fi
-    
-    if [[ ! -f "$TEMP_FILE" ]]; then
-        print_error "Failed to download archive for SHA256 computation"
-        exit 1
-    fi
-    
-    if command -v shasum >/dev/null 2>&1; then
-        SHA256=$(shasum -a 256 "$TEMP_FILE" | cut -d' ' -f1)
-    elif command -v sha256sum >/dev/null 2>&1; then
-        SHA256=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
-    else
-        print_error "No SHA256 utility available"
-        rm -f "$TEMP_FILE"
-        exit 1
-    fi
-    
-    rm -f "$TEMP_FILE"
+if [[ ! -f "$TEMP_FILE" ]]; then
+    print_error "Failed to download archive for SHA256 computation"
+    exit 1
 fi
+
+if command -v shasum >/dev/null 2>&1; then
+    SHA256=$(shasum -a 256 "$TEMP_FILE" | cut -d' ' -f1)
+elif command -v sha256sum >/dev/null 2>&1; then
+    SHA256=$(sha256sum "$TEMP_FILE" | cut -d' ' -f1)
+else
+    print_error "No SHA256 utility available"
+    rm -f "$TEMP_FILE"
+    exit 1
+fi
+
+rm -f "$TEMP_FILE"
 
 print_success "Archive URL: $ARCHIVE_URL"
 print_success "SHA256: $SHA256"
@@ -138,10 +139,18 @@ fi
 # Test formula syntax
 print_status "Testing formula syntax..."
 if command -v brew >/dev/null 2>&1; then
-    if brew formula "$FORMULA_FILE" >/dev/null 2>&1; then
-        print_success "Formula syntax is valid"
+    # Temporarily disable errexit so style/audit failures don't abort the script
+    set +e
+    brew style --formula "$FORMULA_FILE"
+    STYLE_STATUS=$?
+    brew audit --formula --online "$FORMULA_FILE"
+    AUDIT_STATUS=$?
+    set -e
+
+    if [[ $STYLE_STATUS -eq 0 && $AUDIT_STATUS -eq 0 ]]; then
+        print_success "Formula style and audit checks passed"
     else
-        print_warning "Formula syntax check failed (but continuing)"
+        print_warning "Formula checks reported issues (style=$STYLE_STATUS, audit=$AUDIT_STATUS). Continuing."
     fi
 else
     print_warning "Homebrew not found, skipping syntax check"
@@ -163,17 +172,17 @@ if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
         
         if [[ "$CONFIRM_FORMULA_ONLY" =~ ^[Yy]$ ]]; then
             git add "$FORMULA_FILE"
-            git commit -m "Update maiass to v$VERSION (R2 deployment)"
+            git commit -m "Update maiass to v$VERSION (GitHub release)"
         else
             print_warning "Skipping git commit due to uncommitted changes"
             print_status "You can manually commit the formula changes with:"
             echo "  git add $FORMULA_FILE"
-            echo "  git commit -m \"Update maiass to v$VERSION (R2 deployment)\""
+            echo "  git commit -m \"Update maiass to v$VERSION (GitHub release)\""
             echo "  git push"
         fi
     else
         git add "$FORMULA_FILE"
-        git commit -m "Update maiass to v$VERSION (R2 deployment)"
+        git commit -m "Update maiass to v$VERSION (GitHub release)"
     fi
     
     # Only try to push if we successfully committed
@@ -210,7 +219,7 @@ if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
 else
     print_warning "Changes not committed. You can manually commit with:"
     echo "  git add $FORMULA_FILE"
-    echo "  git commit -m \"Update maiass to v$VERSION (R2 deployment)\""
+    echo "  git commit -m \"Update maiass to v$VERSION (GitHub release)\""
     echo "  git push"
 fi
 

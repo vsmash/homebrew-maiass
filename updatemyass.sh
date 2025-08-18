@@ -33,7 +33,9 @@ if [[ "$BRAND" == "maiass" ]]; then
   REPO="vsmash/maiass"
   FORMULAS=("Formula/maiass.rb")
   BINARY_NAME="maiass"
-  USE_R2=1
+  # Revert to GitHub Releases as the source of truth for Linux/Homebrew
+  USE_R2=0
+  # (R2 variables intentionally left unused as part of revert)
   R2_BASE_URL="https://releases.maiass.net"
   R2_LATEST_JSON="$R2_BASE_URL/bash/latest.json"
 elif [[ "$BRAND" == "committhis" ]]; then
@@ -164,8 +166,8 @@ if [[ "$USE_R2" == "1" ]]; then
 
   SOURCE_URL="$ARCHIVE_URL"
 else
-  TAG_URL="https://github.com/$REPO/archive/refs/tags/${NEW_VERSION}.tar.gz"
-  print_info "Checking if tag exists: $TAG_URL"
+  TAG_URL="https://github.com/$REPO/releases/download/v${NEW_VERSION}/${BINARY_NAME}-${NEW_VERSION}.tar.gz"
+  print_info "Checking GitHub Releases tarball: $TAG_URL"
   if command -v curl >/dev/null 2>&1; then
     HTTP_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$TAG_URL")
   elif command -v wget >/dev/null 2>&1; then
@@ -173,10 +175,10 @@ else
   fi
 
   if [[ "$HTTP_STATUS" != "200" ]]; then
-    print_error "Tag $NEW_VERSION not accessible (HTTP $HTTP_STATUS)"
+    print_error "Release tarball for v$NEW_VERSION not accessible (HTTP $HTTP_STATUS)"
     exit 1
   fi
-  print_success "Tag is accessible"
+  print_success "Release tarball is accessible"
 
   # Download and compute SHA256
   TEMP_FILE="/tmp/${BINARY_NAME}-${NEW_VERSION}.tar.gz"
