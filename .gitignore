@@ -5,3 +5,4 @@ maiass.log
 
 # MAIASS environment file
 .env.maiass
+.env.maiass.local
