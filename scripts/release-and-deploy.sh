@@ -29,8 +29,8 @@ echo "============================================"
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MAIASS_DIST_DIR="/Volumes/ashdev/ashdev/static/maiass-whole/maiass-dist"
-HOMEBREW_REPO_DIR="/Volumes/ashdev/ashdev/static/maiass-whole/homebrew-bashmaiass"
+MAIASS_DIST_DIR="/Users/sysop/static/maiass-whole/maiass-dist"
+HOMEBREW_REPO_DIR="/Users/sysop/static/maiass-whole/homebrew-bashmaiass"
 GITHUB_REPO="vsmash/maiass"
 API_ROOT="https://api.github.com"
 UPLOADS_ROOT="https://uploads.github.com"
