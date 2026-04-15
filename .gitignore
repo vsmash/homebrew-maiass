@@ -2,3 +2,5 @@
 devlog.csv
 # MAIASS log file
 maiass.log
+.env.maiass.local
+.env.maiass.bak

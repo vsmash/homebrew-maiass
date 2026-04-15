@@ -90,7 +90,7 @@ fi
 
 print_info "Using version: $NEW_VERSION"
 
-TAG_URL="https://github.com/$REPO/archive/refs/tags/${NEW_VERSION}.tar.gz"
+TAG_URL="https://github.com/$REPO/archive/refs/tags/v${NEW_VERSION}.tar.gz"
 print_info "Checking if tag exists: $TAG_URL"
 
 if command -v curl >/dev/null 2>&1; then
