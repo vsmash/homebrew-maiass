@@ -11,7 +11,7 @@ class Maiass < Formula
 
   def install
     bin.install "maiass.sh" => "maiass"
-    bin.install "bundle.sh" => "committhis"
+    bin.install "committhis.sh" => "committhis"
     libexec.install "lib"
     
     # Create symlinks for convenience
