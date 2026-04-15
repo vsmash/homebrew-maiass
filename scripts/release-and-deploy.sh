@@ -1,8 +1,13 @@
 #!/bin/bash
-# Automated release script for MAIASS Bash via Cloudflare R2
-# This script creates a release, deploys to R2, and updates the Homebrew formula
+# MAIASS Release & Deploy Script - 6-Step Process
+# 1. Commit/push maiass-dist
+# 2. Tag and create GitHub release
+# 3. Upload tarball and ALL loose files
+# 4. Update brew formula
+# 5. Commit/push homebrew-bashmaiass repo
+# 6. Test homebrew
 
-set -e
+set -euo pipefail
 
 # Colors
 RED='\033[0;31m'
@@ -16,160 +21,254 @@ print_success() { echo -e "${GREEN}✅ $1${NC}"; }
 print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_error() { echo -e "${RED}❌ $1${NC}"; }
 
-echo "🚀 MAIASS Bash Release & Deploy"
-echo "==============================="
+# Install trap AFTER functions exist
+trap 'print_error "Command failed: ${BASH_COMMAND}"' ERR
+
+echo "🚀 MAIASS Release & Deploy (6-Step Process)"
+echo "============================================"
 
 # Configuration
-BASHMAIASS_DIR="../bashmaiass"
-FORMULA_FILE="Formula/maiass.rb"
-R2_BASE_URL="https://releases.maiass.net"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAIASS_DIST_DIR="/Users/sysop/static/maiass-whole/maiass-dist"
+HOMEBREW_REPO_DIR="/Users/sysop/static/maiass-whole/homebrew-bashmaiass"
+GITHUB_REPO="vsmash/maiass"
+API_ROOT="https://api.github.com"
+UPLOADS_ROOT="https://uploads.github.com"
 
-# Get current version from maiass.sh
-if [[ -f "$BASHMAIASS_DIR/maiass.sh" ]]; then
-    CURRENT_VERSION=$(grep -m1 '^# MAIASS' "$BASHMAIASS_DIR/maiass.sh" | sed -E 's/.* v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-    if [[ -z "$CURRENT_VERSION" || "$CURRENT_VERSION" == "0.0.0" ]]; then
-        print_error "Could not extract version from maiass.sh"
-        exit 1
-    fi
+print_status "maiass-dist directory: $MAIASS_DIST_DIR"
+print_status "homebrew repo directory: $HOMEBREW_REPO_DIR"
+
+# Preflight checks
+for cmd in jq curl git; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    print_error "Required command not found: $cmd"
+    exit 1
+  fi
+done
+
+# Get version from maiass-dist/package.json
+if [[ ! -f "$MAIASS_DIST_DIR/package.json" ]]; then
+  print_error "package.json not found in $MAIASS_DIST_DIR"
+  exit 1
+fi
+VERSION=$(jq -r '.version' "$MAIASS_DIST_DIR/package.json")
+if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+  print_error "Could not extract version from package.json"
+  exit 1
+fi
+print_status "Version: $VERSION"
+
+# GitHub token
+GITHUB_TOKEN_USE="${GITHUB_TOKEN:-}"
+if [[ -z "$GITHUB_TOKEN_USE" ]] && command -v gh >/dev/null 2>&1; then
+  GITHUB_TOKEN_USE=$(gh auth token 2>/dev/null || true)
+fi
+if [[ -z "$GITHUB_TOKEN_USE" ]]; then
+  print_error "GITHUB_TOKEN is required. Export GITHUB_TOKEN or run 'gh auth login'"
+  exit 1
+fi
+
+# GitHub API helpers
+api_request() {
+  local method="$1"; shift
+  local url="$1"; shift
+  curl -sS --fail --retry 3 --connect-timeout 10 --max-time 120 \
+    -H "Authorization: Bearer $GITHUB_TOKEN_USE" \
+    -H "Accept: application/vnd.github+json" \
+    -X "$method" "$url" "$@"
+}
+
+upload_asset() {
+  local release_id="$1"; shift
+  local file_path="$1"; shift
+  local name="$1"; shift
+  local content_type="$1"; shift
+  print_status "Uploading asset: $name"
+  if api_request POST "$UPLOADS_ROOT/repos/$GITHUB_REPO/releases/$release_id/assets?name=$name" \
+    -H "Content-Type: $content_type" \
+    --data-binary @"$file_path" >/dev/null 2>&1; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# STEP 1: Commit and push in maiass-dist
+print_status "(1/6) Committing and pushing in maiass-dist..."
+cd "$MAIASS_DIST_DIR"
+if [[ ! -d ".git" ]]; then
+  print_error "$MAIASS_DIST_DIR is not a git repository"
+  exit 1
+fi
+git add .
+if git diff --staged --quiet; then
+  print_warning "No changes to commit in maiass-dist"
 else
-    print_error "maiass.sh not found in $BASHMAIASS_DIR"
-    exit 1
+  git commit -m "Release v$VERSION distribution files"
+  git push
+  print_success "Pushed distribution changes"
 fi
 
-print_status "Current version: $CURRENT_VERSION"
+# STEP 2: Tag and create GitHub release
+print_status "(2/6) Tagging v$VERSION and creating GitHub release..."
+if git tag -l | grep -q "^v$VERSION$"; then
+  print_warning "Tag v$VERSION exists; deleting and recreating"
+  git tag -d "v$VERSION" || true
+  git push origin ":refs/tags/v$VERSION" 2>/dev/null || true
+fi
+git tag -a "v$VERSION" -m "Release v$VERSION"
+git push origin "v$VERSION"
 
-# Ask for new version
-echo
-printf "Enter new version (current: %s): " "$CURRENT_VERSION"
-read NEW_VERSION
-
-if [[ -z "$NEW_VERSION" ]]; then
-    print_warning "No version entered, using current version: $CURRENT_VERSION"
-    NEW_VERSION="$CURRENT_VERSION"
+# Check for existing release
+RELEASE_ID=""
+if RELEASE_JSON=$(api_request GET "$API_ROOT/repos/$GITHUB_REPO/releases/tags/v$VERSION" 2>/dev/null); then
+  RELEASE_ID=$(printf '%s' "$RELEASE_JSON" | jq -r '.id // empty')
 fi
 
-# Validate version format
-if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    print_error "Invalid version format. Use semantic versioning (e.g., 5.7.1)"
-    exit 1
-fi
+# Create release notes
+NOTES_FILE="/tmp/maiass-notes-$VERSION.md"
+cat > "$NOTES_FILE" <<EOF
+Release v$VERSION of MAIASS Bash
 
-print_status "Using version: $NEW_VERSION"
+This release contains the distribution files for installation.
 
-# Update version in maiass.sh if different
-if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
-    print_status "Updating version in maiass.sh..."
-    sed -i.bak "s/^# MAIASS.* v[0-9]\+\.[0-9]\+\.[0-9]\+/# MAIASS (Modular AI-Augmented Semantic Scribe) v$NEW_VERSION/" "$BASHMAIASS_DIR/maiass.sh"
-    rm -f "$BASHMAIASS_DIR/maiass.sh.bak"
-    print_success "Version updated in maiass.sh"
-fi
+## Installation
 
-# Deploy to R2
-print_status "Deploying to Cloudflare R2..."
-if ! ./scripts/deploy-to-r2.sh; then
-    print_error "R2 deployment failed"
-    exit 1
-fi
+### Via Homebrew
+\`\`\`bash
+brew tap vsmash/maiass
+brew install maiass
+\`\`\`
 
-# Extract SHA256 from the deployment output (we'll need to get this from the deployment)
-ARCHIVE_NAME="bashmaiass-${NEW_VERSION}.tar.gz"
-R2_URL="$R2_BASE_URL/bash/$NEW_VERSION/$ARCHIVE_NAME"
+### Direct Install (Linux)
+\`\`\`bash
+curl -sSL https://github.com/vsmash/maiass/releases/download/v$VERSION/install.sh | bash
+\`\`\`
 
-# Calculate SHA256 by re-creating the archive temporarily (since deploy script cleans up)
-print_status "Calculating SHA256 for formula update..."
+For more information, visit [maiass.net](https://maiass.net)
+EOF
 
-# Create temporary release directory again
-RELEASE_DIR="release-temp"
-rm -rf "$RELEASE_DIR"
-mkdir -p "$RELEASE_DIR"
-
-# Copy bashmaiass files
-cp -r "$BASHMAIASS_DIR"/* "$RELEASE_DIR/"
-
-# Remove development files
-rm -rf "$RELEASE_DIR"/.git*
-rm -rf "$RELEASE_DIR"/node_modules
-rm -f "$RELEASE_DIR"/.env*
-rm -f "$RELEASE_DIR"/maiass.log
-rm -f "$RELEASE_DIR"/devlog.csv
-rm -rf "$RELEASE_DIR"/scripts
-
-# Create tarball
-cd "$RELEASE_DIR" || exit 1
-tar -czf "../$ARCHIVE_NAME" .
-cd ..
-
-# Calculate SHA256
-if command -v shasum &> /dev/null; then
-    SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | cut -d' ' -f1)
-elif command -v sha256sum &> /dev/null; then
-    SHA256=$(sha256sum "$ARCHIVE_NAME" | cut -d' ' -f1)
+if [[ -n "$RELEASE_ID" ]]; then
+  print_status "Updating existing GitHub release (id=$RELEASE_ID)"
+  api_request PATCH "$API_ROOT/repos/$GITHUB_REPO/releases/$RELEASE_ID" \
+    -d "$(jq -nc --arg name "MAIASS Bash v$VERSION" --rawfile body "$NOTES_FILE" '{name:$name, body:$body, draft:false, prerelease:false}')" >/dev/null
 else
-    print_error "Neither shasum nor sha256sum found"
-    exit 1
+  print_status "Creating new GitHub release"
+  CREATE_JSON=$(api_request POST "$API_ROOT/repos/$GITHUB_REPO/releases" \
+    -d "$(jq -nc --arg tag "v$VERSION" --arg name "MAIASS Bash v$VERSION" --rawfile body "$NOTES_FILE" '{tag_name:$tag, name:$name, body:$body, draft:false, prerelease:false}')")
+  RELEASE_ID=$(printf '%s' "$CREATE_JSON" | jq -r '.id')
 fi
 
-# Cleanup
-rm -rf "$RELEASE_DIR"
-rm -f "$ARCHIVE_NAME"
-
-print_success "SHA256: $SHA256"
-
-# Update Homebrew formula
-print_status "Updating Homebrew formula..."
-
-if [[ ! -f "$FORMULA_FILE" ]]; then
-    print_error "Formula file not found: $FORMULA_FILE"
-    exit 1
+if [[ -z "$RELEASE_ID" || "$RELEASE_ID" == "null" ]]; then
+  print_error "Failed to get release ID"
+  exit 1
 fi
+print_success "GitHub release ready (id=$RELEASE_ID)"
 
-# Create backup
-cp "$FORMULA_FILE" "$FORMULA_FILE.bak"
+# STEP 3: Upload tarball and ALL loose files
+print_status "(3/6) Creating tarball and uploading all assets..."
 
-# Update the formula with new URL, SHA256, and version
-sed -i.tmp \
-    -e "s|url \".*\"|url \"$R2_URL\"|" \
-    -e "s|sha256 \".*\"|sha256 \"$SHA256\"|" \
-    -e "s|version \".*\"|version \"$NEW_VERSION\"|" \
-    "$FORMULA_FILE"
-
-rm -f "$FORMULA_FILE.tmp"
-
-print_success "Formula updated with:"
-print_status "  URL: $R2_URL"
-print_status "  SHA256: $SHA256"
-print_status "  Version: $NEW_VERSION"
-
-# Show diff
-echo
-print_status "Formula changes:"
-if command -v diff &> /dev/null; then
-    diff -u "$FORMULA_FILE.bak" "$FORMULA_FILE" || true
-fi
-
-# Test the formula
-print_status "Testing formula syntax..."
-if command -v brew &> /dev/null; then
-    if brew formula "$FORMULA_FILE" &> /dev/null; then
-        print_success "Formula syntax is valid"
-    else
-        print_warning "Formula syntax check failed (but continuing)"
-    fi
+# Create tarball (exclude macOS extended attributes for clean Linux installs)
+ARCHIVE_NAME="maiass-$VERSION.tar.gz"
+if tar --version 2>/dev/null | grep -q "GNU tar"; then
+  # GNU tar (Linux)
+  tar -czf "/tmp/$ARCHIVE_NAME" -C "$MAIASS_DIST_DIR" .
 else
-    print_warning "Homebrew not found, skipping syntax check"
+  # BSD tar (macOS) - exclude extended attributes
+  tar -czf "/tmp/$ARCHIVE_NAME" -C "$MAIASS_DIST_DIR" --no-xattrs .
+fi
+upload_asset "$RELEASE_ID" "/tmp/$ARCHIVE_NAME" "$ARCHIVE_NAME" "application/gzip"
+
+# Upload all loose files from maiass-dist (avoid duplicates)
+TEMP_FILE_LIST="/tmp/maiass-files-$VERSION.txt"
+UPLOADED_NAMES_FILE="/tmp/maiass-uploaded-$VERSION.txt"
+find "$MAIASS_DIST_DIR" -type f -not -path '*/.*' > "$TEMP_FILE_LIST"
+
+# Clear uploaded names tracking file
+> "$UPLOADED_NAMES_FILE"
+
+while IFS= read -r file; do
+  relative_path="${file#$MAIASS_DIST_DIR/}"
+  filename="$(basename "$file")"
+  
+  # Skip if we've already uploaded this filename
+  if grep -q "^$filename$" "$UPLOADED_NAMES_FILE" 2>/dev/null; then
+    print_warning "Skipping duplicate filename: $filename"
+    continue
+  fi
+  
+  # Mark this filename as uploaded
+  echo "$filename" >> "$UPLOADED_NAMES_FILE"
+  
+  case "$filename" in
+    *.sh) content_type="text/x-shellscript" ;;
+    *.json) content_type="application/json" ;;
+    *.md) content_type="text/markdown" ;;
+    *.txt) content_type="text/plain" ;;
+    *.png|*.jpg|*.jpeg|*.gif) content_type="image/*" ;;
+    *) content_type="application/octet-stream" ;;
+  esac
+  
+  if upload_asset "$RELEASE_ID" "$file" "$filename" "$content_type"; then
+    print_success "Uploaded: $filename"
+  else
+    print_warning "Failed to upload: $filename (continuing...)"
+  fi
+done < "$TEMP_FILE_LIST"
+
+# Cleanup temp files
+rm -f "$TEMP_FILE_LIST" "$UPLOADED_NAMES_FILE"
+
+print_success "All assets uploaded"
+
+# STEP 4: Update brew formula
+print_status "(4/6) Updating Homebrew formula..."
+cd "$HOMEBREW_REPO_DIR"
+
+# Calculate SHA256 of the tarball from GitHub
+GITHUB_ARCHIVE_URL="https://github.com/$GITHUB_REPO/releases/download/v$VERSION/$ARCHIVE_NAME"
+curl -fsSL "$GITHUB_ARCHIVE_URL" -o "/tmp/github-$ARCHIVE_NAME"
+SHA256=$(shasum -a 256 "/tmp/github-$ARCHIVE_NAME" | cut -d' ' -f1)
+
+# Update formula
+if [[ -f "scripts/update-formula.sh" ]]; then
+  ./scripts/update-formula.sh "$VERSION" "$SHA256"
+else
+  print_warning "update-formula.sh not found; updating manually"
+  sed -i '' "s/version \".*\"/version \"$VERSION\"/" Formula/maiass.rb
+  sed -i '' "s/sha256 \".*\"/sha256 \"$SHA256\"/" Formula/maiass.rb
 fi
 
-# Cleanup backup
-rm -f "$FORMULA_FILE.bak"
+print_success "Formula updated"
 
+# STEP 5: Commit and push homebrew-bashmaiass repo
+print_status "(5/6) Committing and pushing homebrew-bashmaiass repo..."
+git add .
+if git diff --staged --quiet; then
+  print_warning "No changes to commit in homebrew repo"
+else
+  git commit -m "Update maiass to v$VERSION"
+  git push
+  print_success "Pushed homebrew changes"
+fi
+
+# STEP 6: Test homebrew (optional)
+print_status "(6/6) Testing Homebrew installation..."
+if command -v brew >/dev/null 2>&1; then
+  print_status "Testing formula syntax..."
+  if brew audit --strict Formula/maiass.rb; then
+    print_success "Formula audit passed"
+  else
+    print_warning "Formula audit had warnings"
+  fi
+  
+  print_status "To test installation: brew install --build-from-source Formula/maiass.rb"
+else
+  print_warning "Homebrew not found; skipping tests"
+fi
+
+print_success "🎉 Release v$VERSION completed successfully!"
 echo
-print_success "🎉 Release v$NEW_VERSION completed!"
-echo
-print_status "Next steps:"
-echo "1. Review the updated formula: $FORMULA_FILE"
-echo "2. Test locally: brew install --build-from-source $FORMULA_FILE"
-echo "3. Commit and push changes to update the tap"
-echo "4. Users can install with: brew tap vsmash/maiass && brew install maiass"
-echo
-print_status "R2 URL: $R2_URL"
-print_status "SHA256: $SHA256"
+print_status "Release URL: https://github.com/$GITHUB_REPO/releases/tag/v$VERSION"
+print_status "Archive URL: https://github.com/$GITHUB_REPO/releases/download/v$VERSION/$ARCHIVE_NAME"
+print_status "Users can install with: brew tap vsmash/maiass && brew install maiass"
