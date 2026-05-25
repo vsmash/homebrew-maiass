@@ -1,0 +1,58 @@
+## 1.0.1
+25 May 2026
+
+- Set up project and documentation
+	- Added configuration file for wrangler state
+	- Created initial version file
+	- Introduced workflow documentation for the release process
+	- Added initial package and deployment scripts
+- Updated Maiass formula for Homebrew
+	- Changed download URL to the new release site
+	- Updated SHA256 checksum to match the new tarball
+- Updated configuration and cache files
+	- Added MAIASS_GITKEEP variable to prevent repeated gitignore prompts
+	- Updated .gitignore to include local and backup environment files
+	- Created wrangler-account.json with account details
+	- Corrected tag URL format in updatemyass.sh
+- Added deploy script for the release process
+	- Created deploy.sh to automate deployment
+	- Included script to trigger release-and-deploy.sh
+- Updated .gitignore file
+	- Ignored .env.maiass.bak backup files
+	- Added .env.maiass.local to .gitignore
+- Simplified release and deploy script
+	- Removed Homebrew release archive creation
+	- Streamlined version extraction from package.json
+	- Added checks for package.json and maiass.sh file existence
+	- Added SHA256 calculation for dist file
+	- Simplified R2 upload for versioned and latest paths
+	- Streamlined Homebrew formula update with new SHA256 and URL
+	- Removed individual file uploads and docs directory upload
+	- Removed temp directories, tarballs, and extra files handling
+- Updated project with new features and documentation
+	- Ignored MAIASS environment file in git
+	- Added wrangler state with account id and bucket name
+	- Included version file set to 1.0.0
+	- Created new workflow document outlining MAIASS Bash Release Workflow
+	- Added README for MAIASS Bash Deployment Scripts
+- Fixed SHA256 mismatch for bashmaiass-5.7.1.tar.gz
+	- Updated SHA256 to match actual R2 archive
+	- Resolved Homebrew installation error with SHA256 verification
+- Refactored update script for improved compatibility and efficiency
+	- Added portable sed function for cross-platform compatibility
+	- Updated formula file handling with portable sed utility
+- Refactored formula and update script
+	- Renamed myass.rb.backup to aicommit.rb with updated metadata
+	- Added support for multiple brands in update-formula.sh
+	- Corrected URL and binary name handling in update-formula.sh
+- Added AI commit script to installation
+	- Installed aicommit.sh alongside main scripts in all formulae
+	- Ensured files end with a newline
+- Added caveats section to MAIASS formulas
+	- Added caveats section to maiass.rb formula
+	- Added caveats section to miass.rb formula
+	- Added caveats section to myass.rb formula
+- Updated SHA256 checksum for MAIASS formulae
+	- Updated SHA256 checksum in maiass.rb
+	- Updated SHA256 checksum in miass.rb
+	- Updated SHA256 checksum in myass.rb
