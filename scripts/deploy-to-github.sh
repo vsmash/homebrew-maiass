@@ -43,6 +43,29 @@ for cmd in curl jq git; do
   fi
 done
 
+# Ensure GitHub CLI is acting as vsmash + has the 'workflow' scope BEFORE we read
+# its token below (this script creates a GitHub release on vsmash/maiass). Skipped
+# only when GITHUB_TOKEN is supplied explicitly (CI provides its own scoped token).
+require_gh_vsmash() {
+  local want="vsmash" active scopes
+  command -v gh >/dev/null 2>&1 || { print_error "gh CLI not found — required for the GitHub release."; exit 1; }
+  active=$(gh api user --jq .login 2>/dev/null || true)
+  if [[ "$active" != "$want" ]]; then
+    gh auth switch -u "$want" >/dev/null 2>&1 || true
+    active=$(gh api user --jq .login 2>/dev/null || true)
+  fi
+  if [[ "$active" != "$want" ]]; then
+    print_error "GitHub CLI must be authenticated as '$want' (currently: ${active:-none}). Fix: gh auth switch -u $want"
+    exit 1
+  fi
+  scopes=$(gh api -i user 2>/dev/null | grep -i '^x-oauth-scopes:' | cut -d: -f2- | tr -d ' \r')
+  case ",$scopes," in
+    *,workflow,*) : ;;
+    *) print_error "gh token for '$want' lacks the 'workflow' scope (needed to create GitHub releases). Fix: gh auth refresh -h github.com -s workflow"; exit 1 ;;
+  esac
+}
+[[ -n "${GITHUB_TOKEN:-}" ]] || require_gh_vsmash
+
 # Acquire GitHub token for REST API (prefer env, fallback to gh)
 GITHUB_TOKEN_USE="${GITHUB_TOKEN:-}"
 if [[ -z "$GITHUB_TOKEN_USE" ]] && command -v gh >/dev/null 2>&1; then
