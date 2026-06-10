@@ -4,6 +4,12 @@
 
 set -e
 
+# This script commits the formula to the tap repo (cwd) and pushes. Force the
+# vsmash SSH key (the 1Password agent can otherwise push as a persona) and set the
+# owner identity. Honour an existing GIT_SSH_COMMAND (parent deploy script / CI).
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o IdentitiesOnly=yes}"
+command -v git-as >/dev/null 2>&1 && git-as mark >/dev/null 2>&1 || true
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
