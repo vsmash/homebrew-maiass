@@ -46,6 +46,39 @@ for cmd in jq curl git; do
   fi
 done
 
+# Ensure GitHub CLI is acting as vsmash + has the 'workflow' scope. This script
+# creates a GitHub release on vsmash/maiass (via `gh auth token`), which needs
+# the vsmash account and the 'workflow' scope (repo contains .github/workflows).
+require_gh_vsmash() {
+  local want="vsmash" active scopes
+  command -v gh >/dev/null 2>&1 || { print_error "gh CLI not found — required for the GitHub release."; exit 1; }
+  active=$(gh api user --jq .login 2>/dev/null || true)
+  if [[ "$active" != "$want" ]]; then
+    gh auth switch -u "$want" >/dev/null 2>&1 || true
+    active=$(gh api user --jq .login 2>/dev/null || true)
+  fi
+  if [[ "$active" != "$want" ]]; then
+    print_error "GitHub CLI must be authenticated as '$want' (currently: ${active:-none}). Fix: gh auth switch -u $want"
+    exit 1
+  fi
+  scopes=$(gh api -i user 2>/dev/null | grep -i '^x-oauth-scopes:' | cut -d: -f2- | tr -d ' \r')
+  case ",$scopes," in
+    *,workflow,*) : ;;
+    *) print_error "gh token for '$want' lacks the 'workflow' scope (needed to create GitHub releases). Fix: gh auth refresh -h github.com -s workflow"; exit 1 ;;
+  esac
+}
+require_gh_vsmash
+print_success "GitHub CLI authenticated as vsmash (workflow scope present)"
+
+# Deployments are owner (mark/vsmash) actions. Set the owner identity + origin for
+# every repo this script pushes to (maiass-dist + the homebrew tap), and force the
+# vsmash SSH key so the 1Password agent can't push as a persona (tylerdurton).
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o IdentitiesOnly=yes}"
+if command -v git-as >/dev/null 2>&1; then
+  git-as mark "$MAIASS_DIST_DIR" >/dev/null 2>&1 || true
+  git-as mark "$HOMEBREW_REPO_DIR" >/dev/null 2>&1 || true
+fi
+
 # Get version from maiass-dist/package.json
 if [[ ! -f "$MAIASS_DIST_DIR/package.json" ]]; then
   print_error "package.json not found in $MAIASS_DIST_DIR"
