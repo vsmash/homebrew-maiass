@@ -2,7 +2,7 @@ class Maiass < Formula
   desc "Modular AI-Augmented Semantic Scribe for Git workflows"
   homepage "https://maiass.net"
   url "https://github.com/vsmash/maiass/releases/download/v5.10.56/maiass-5.10.56.tar.gz"
-  sha256 "6bf72a2c846699c855671794fc00aa3594c5b3d6b536b8518563723917e73002"
+  sha256 "e8fb6c8676ba032ca3b0689e35b425cbc95c5af975427640fa75d665e515b9a0"
   license "GPL-3.0-only"
   version "5.10.56"
   
@@ -11,8 +11,9 @@ class Maiass < Formula
 
   def install
     bin.install "maiass.sh" => "maiass"
-    bin.install "committhis.sh" => "committhis"
-
+    bin.install "bundle.sh" => "committhis"
+    libexec.install "lib"
+    
     # Create symlinks for convenience
     bin.install_symlink "maiass" => "myass"
     bin.install_symlink "maiass" => "miass"
