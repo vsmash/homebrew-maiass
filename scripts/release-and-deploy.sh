@@ -117,6 +117,16 @@ upload_asset() {
   local name="$1"; shift
   local content_type="$1"; shift
   print_status "Uploading asset: $name"
+  # Delete any existing asset with the same name first — the GitHub upload API
+  # does not clobber, so on a re-run the POST would fail and leave stale bytes
+  # (which is part of why a failed deploy needed a version bump to retry). This
+  # makes asset upload idempotent.
+  local existing_id
+  existing_id=$(api_request GET "$API_ROOT/repos/$GITHUB_REPO/releases/$release_id/assets?per_page=100" 2>/dev/null \
+    | jq -r --arg n "$name" '.[] | select(.name==$n) | .id' | head -1)
+  if [[ -n "$existing_id" ]]; then
+    api_request DELETE "$API_ROOT/repos/$GITHUB_REPO/releases/assets/$existing_id" >/dev/null 2>&1 || true
+  fi
   if api_request POST "$UPLOADS_ROOT/repos/$GITHUB_REPO/releases/$release_id/assets?name=$name" \
     -H "Content-Type: $content_type" \
     --data-binary @"$file_path" >/dev/null 2>&1; then
