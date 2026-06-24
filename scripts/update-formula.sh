@@ -144,22 +144,18 @@ fi
 
 # Test formula syntax
 print_status "Testing formula syntax..."
-if command -v brew >/dev/null 2>&1; then
-    # Temporarily disable errexit so style/audit failures don't abort the script
-    set +e
-    brew style --formula "$FORMULA_FILE"
-    STYLE_STATUS=$?
-    brew audit --formula --online "$FORMULA_FILE"
-    AUDIT_STATUS=$?
-    set -e
-
-    if [[ $STYLE_STATUS -eq 0 && $AUDIT_STATUS -eq 0 ]]; then
-        print_success "Formula style and audit checks passed"
+# Homebrew 6.0 disabled `brew audit/style [path]` for a formula not inside a tap
+# ("brew audit [path] is disabled! Use brew audit [name]"), so the old path-based
+# checks always error here. Use a tap-independent Ruby syntax check instead (non-fatal).
+if command -v ruby >/dev/null 2>&1; then
+    if ruby -c "$FORMULA_FILE" >/dev/null 2>&1; then
+        print_success "Formula Ruby syntax OK"
     else
-        print_warning "Formula checks reported issues (style=$STYLE_STATUS, audit=$AUDIT_STATUS). Continuing."
+        print_warning "Formula has a Ruby syntax error:"
+        ruby -c "$FORMULA_FILE" || true
     fi
 else
-    print_warning "Homebrew not found, skipping syntax check"
+    print_warning "ruby not found, skipping syntax check"
 fi
 
 # Git operations
@@ -207,8 +203,15 @@ if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
                 if [[ "$CONFIRM_TEST" =~ ^[Yy]$ ]]; then
                     print_status "Testing Homebrew install..."
                     brew update
-                    brew reinstall maiass
-                    maiass --version || print_warning "maiass not found or failed to run"
+                    # Homebrew 6.0+ ignores third-party taps until trusted (once per machine).
+                    # Without this the test aborts with "Refusing to load formula ... from
+                    # untrusted tap" even though the release itself is already published.
+                    brew trust vsmash/maiass || true
+                    if brew reinstall maiass; then
+                        maiass --version || print_warning "maiass not found or failed to run"
+                    else
+                        print_warning "Homebrew install test failed — the release is already published; investigate separately."
+                    fi
                     
                     printf "Uninstall maiass? (y/N): "
                     read CONFIRM_UNINSTALL
