@@ -216,8 +216,12 @@ if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
                     printf "Uninstall maiass? (y/N): "
                     read CONFIRM_UNINSTALL
                     if [[ "$CONFIRM_UNINSTALL" =~ ^[Yy]$ ]]; then
-                        brew uninstall maiass
-                        print_success "maiass uninstalled"
+                        # Don't abort if the install test failed (no keg to remove).
+                        if brew uninstall maiass 2>/dev/null; then
+                            print_success "maiass uninstalled"
+                        else
+                            print_warning "maiass was not installed — nothing to uninstall"
+                        fi
                     fi
                 fi
             else

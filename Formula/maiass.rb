@@ -10,10 +10,11 @@ class Maiass < Formula
   depends_on "jq"
 
   def install
+    # The release tarball ships two self-contained bundles (no lib/ — each is a
+    # single bundled script) plus committhis as committhis.sh.
     bin.install "maiass.sh" => "maiass"
-    bin.install "bundle.sh" => "committhis"
-    libexec.install "lib"
-    
+    bin.install "committhis.sh" => "committhis"
+
     # Create symlinks for convenience
     bin.install_symlink "maiass" => "myass"
     bin.install_symlink "maiass" => "miass"
